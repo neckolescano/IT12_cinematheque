@@ -3,6 +3,7 @@
 @section('title', $label.'s')
 
 @section('content')
+    @include('staff.partials.catalog-tabs')
     <div class="page-head">
         <div>
             <span class="eyebrow">Catalog</span>

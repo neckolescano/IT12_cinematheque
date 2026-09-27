@@ -18,11 +18,8 @@
         <nav class="nav" id="site-nav" aria-label="Main">
             <a href="{{ route('home') }}" @if (request()->routeIs('home', 'screenings.*', 'bookings.create')) aria-current="page" @endif>Screenings</a>
             <a href="{{ route('bookings.lookup') }}" @if (request()->routeIs('bookings.lookup', 'bookings.show')) aria-current="page" @endif>Find my booking</a>
-            @auth
-                <a class="btn btn--primary btn--sm" href="{{ route('staff.dashboard') }}">Staff dashboard</a>
-            @else
-                <a class="btn btn--ghost btn--sm" href="{{ route('login') }}">Staff login</a>
-            @endauth
+            {{-- No staff/admin link: the admin area is not advertised to customers. --}}
+            @include('partials.theme-toggle')
         </nav>
     </div>
 </header>
@@ -42,7 +39,7 @@
         <div class="site-footer__grid">
             <div>
                 @include('partials.brand')
-                <p class="small" style="margin-top:1rem;max-width:34ch">A home for Philippine cinema in Davao City — screenings, retrospectives, talks and the local film community.</p>
+                <p class="small" style="margin-top:var(--s-4);max-width:36ch">A home for Philippine cinema in Davao City — screenings, retrospectives, talks and the local film community.</p>
             </div>
             <div>
                 <h4>Moviegoers</h4>
@@ -55,8 +52,8 @@
                 <h4>How it works</h4>
                 <ul>
                     <li>Reserve seats online — no account needed</li>
-                    <li>Paid screenings: pay via the Cinematheque QR, then upload proof</li>
-                    <li>Show your booking reference at the door</li>
+                    <li>Paid screenings: pay through PayMongo</li>
+                    <li>Your e-ticket arrives by email</li>
                 </ul>
             </div>
         </div>

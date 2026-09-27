@@ -2,9 +2,9 @@
 {{-- One status vocabulary for reservations, payments, proofs and attendance. --}}
 @php
     $tone = match ($value) {
-        'confirmed', 'verified', 'accepted', 'checked in', 'active' => 'success',
-        'pending', 'awaiting review' => 'warning',
-        'cancelled', 'rejected', 'inactive' => 'error',
+        'confirmed', 'approved', 'verified', 'paid', 'accepted', 'admitted', 'checked in', 'active' => 'success',
+        'pending', 'unpaid', 'awaiting payment', 'awaiting approval', 'awaiting review' => 'warning',
+        'cancelled', 'rejected', 'no-show', 'inactive' => 'error',
         default => 'neutral',
     };
 @endphp

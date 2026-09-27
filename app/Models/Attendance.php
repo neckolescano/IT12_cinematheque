@@ -11,7 +11,7 @@ class Attendance extends Model
 
     public $timestamps = false;
 
-    protected $fillable = ['reservation_seat_id', 'control_number', 'remarks', 'checked_in_at', 'checked_in_by'];
+    protected $fillable = ['reservation_seat_id', 'remarks', 'checked_in_at', 'checked_in_by'];
 
     protected function casts(): array
     {

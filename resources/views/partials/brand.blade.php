@@ -6,7 +6,7 @@
             <rect x="6" y="8" width="3" height="3" rx="1"/><rect x="6" y="18.5" width="3" height="3" rx="1"/><rect x="6" y="29" width="3" height="3" rx="1"/>
             <rect x="31" y="8" width="3" height="3" rx="1"/><rect x="31" y="18.5" width="3" height="3" rx="1"/><rect x="31" y="29" width="3" height="3" rx="1"/>
         </g>
-        <path d="M11 28 L16.5 19 L19.5 23 L23 15 L29 28 Z" fill="#fff"/>
+        <path class="brand__mountain" d="M11 28 L16.5 19 L19.5 23 L23 15 L29 28 Z"/>
         <path d="M11 28 L16.5 19 L19.5 23 L23 15 L29 28" fill="none" stroke="#ebbc00" stroke-width="1.2" stroke-linejoin="round"/>
     </svg>
     <span class="brand__text">

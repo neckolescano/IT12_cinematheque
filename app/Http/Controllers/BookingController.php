@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreReservationRequest;
-use App\Models\PaymentQrCode;
 use App\Models\Reservation;
 use App\Models\Screening;
 use App\Models\Seat;
+use App\Services\PayMongo\PayMongoException;
+use App\Services\ReservationMailer;
+use App\Services\ReservationPayments;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,7 +17,9 @@ use Illuminate\View\View;
 
 /**
  * Public reservation flow: pick seats -> declare one attendee per seat -> submit.
- * Paid screenings continue to the Payment Screen (bookings.show).
+ * Every new reservation starts "pending":
+ *   paid screenings  -> PayMongo checkout -> confirmed only when PayMongo reports it paid
+ *   free screenings  -> confirmed when staff approve it
  */
 class BookingController extends Controller
 {
@@ -59,7 +63,7 @@ class BookingController extends Controller
         ]);
     }
 
-    public function store(StoreReservationRequest $request, Screening $screening): RedirectResponse
+    public function store(StoreReservationRequest $request, Screening $screening, ReservationMailer $mailer): RedirectResponse
     {
         $data = $request->validated();
         $seatIds = array_map('intval', $data['seat_ids']);
@@ -77,14 +81,14 @@ class BookingController extends Controller
                 $reservation = Reservation::create([
                     'screening_id' => $screening->screening_id,
                     'booking_reference' => Reservation::generateBookingReference(),
-                    // Free screenings need no payment step, so they are confirmed immediately.
-                    'status' => $screening->isPaid() ? 'pending' : 'confirmed',
+                    // Pending until PayMongo confirms payment (paid) or staff approve it (free).
+                    'status' => 'pending',
                     'reservation_datetime' => now(),
                     'lead_first_name' => $data['lead_first_name'],
                     'lead_middle_name' => $data['lead_middle_name'] ?? null,
                     'lead_last_name' => $data['lead_last_name'],
                     'lead_contact_no' => $data['lead_contact_no'],
-                    'lead_email' => $data['lead_email'] ?? null,
+                    'lead_email' => $data['lead_email'],
                 ]);
 
                 foreach ($seatIds as $seatId) {
@@ -129,8 +133,71 @@ class BookingController extends Controller
             return back()->withInput()->withErrors(['seat_ids' => 'Not enough seats left for this screening.']);
         }
 
+        // After the transaction: an email problem must never undo the booking.
+        $emailed = $mailer->pending($reservation);
+        $note = $emailed ? ' A copy was sent to '.$reservation->lead_email.'.'
+            : ' We could not send the confirmation email, so please save your booking reference.';
+
+        if ($screening->isPaid()) {
+            // Straight on to payment: one less click for the customer.
+            return redirect()->route('bookings.pay', $reservation)
+                ->with('status', 'Reservation '.$reservation->booking_reference.' is held. Complete payment to receive your e-ticket.'.$note);
+        }
+
         return redirect()->route('bookings.show', $reservation)
-            ->with('status', 'Reservation submitted. Keep your booking reference: '.$reservation->booking_reference);
+            ->with('status', 'Reservation '.$reservation->booking_reference.' received. Your e-ticket will be emailed once staff approve it.'.$note);
+    }
+
+    /** Send the customer to PayMongo's hosted checkout (reusing an open session). */
+    public function pay(Reservation $reservation, ReservationPayments $payments): RedirectResponse
+    {
+        // Keep the "reservation held" message from store() if we end up on the booking page.
+        session()->reflash();
+
+        if (! $reservation->payment) {
+            return redirect()->route('bookings.show', $reservation);
+        }
+
+        if (! $payments->isConfigured()) {
+            return redirect()->route('bookings.show', $reservation)
+                ->withErrors(['payment' => 'Online payment is not available right now. Please try again later or contact Cinematheque Centre Davao.']);
+        }
+
+        try {
+            $url = $payments->checkoutUrl($reservation);
+        } catch (PayMongoException $e) {
+            report($e);
+
+            return redirect()->route('bookings.show', $reservation)
+                ->withErrors(['payment' => 'We could not open the payment page. Please try again in a moment.']);
+        }
+
+        return $url ? redirect()->away($url) : redirect()->route('bookings.show', $reservation);
+    }
+
+    /**
+     * PayMongo's success_url. The redirect itself proves nothing, so we ask PayMongo's API
+     * for the session's real status before telling the customer anything.
+     */
+    public function paymentReturn(Reservation $reservation, ReservationPayments $payments): RedirectResponse
+    {
+        $payment = $reservation->payment;
+        if (! $payment) {
+            return redirect()->route('bookings.show', $reservation);
+        }
+
+        try {
+            $paid = $payments->sync($payment);
+        } catch (PayMongoException $e) {
+            report($e);
+            $paid = false;
+        }
+
+        return $paid
+            ? redirect()->route('bookings.show', $reservation)
+                ->with('status', 'Payment received. Your reservation is confirmed and your e-ticket has been emailed to '.$reservation->lead_email.'.')
+            : redirect()->route('bookings.show', $reservation)
+                ->with('warning', 'We have not received confirmation from PayMongo yet. If you completed the payment, it can take a minute. Use "Check payment status" below.');
     }
 
     public function lookup(Request $request): View|RedirectResponse
@@ -148,21 +215,18 @@ class BookingController extends Controller
         return view('public.bookings.lookup');
     }
 
-    /** Booking summary + Payment Screen (QR, amount due, proof upload/history). */
-    public function show(Reservation $reservation): View
+    /** Booking summary + payment status / "Pay with PayMongo". */
+    public function show(Request $request, Reservation $reservation, ReservationPayments $payments): View
     {
-        $reservation->load('screening.movie', 'reservationSeats.seat', 'reservationSeats.attendee', 'payment.proofs');
-
+        $reservation->load('screening.movie', 'reservationSeats.seat', 'reservationSeats.attendee', 'payment');
         $payment = $reservation->payment;
 
         return view('public.bookings.show', [
             'reservation' => $reservation,
             'payment' => $payment,
-            'qrCode' => $payment ? PaymentQrCode::current() : null,
-            'canUploadProof' => $payment
-                && $payment->status !== 'verified'
-                && $reservation->status !== 'cancelled'
-                && ! $payment->hasPendingProof(),
+            'canPay' => $payment && ! $payment->isPaid() && $reservation->status === 'pending',
+            'paymentsEnabled' => $payments->isConfigured(),
+            'paymentCancelled' => $request->query('payment') === 'cancelled',
         ]);
     }
 }

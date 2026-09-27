@@ -2,69 +2,51 @@
 
 @section('title', 'Upcoming screenings')
 
-@php($featured = $screenings->onFirstPage() ? $screenings->first() : null)
-
 @section('hero')
-    <section class="hero tex-grid on-dark">
+    <section class="hero tex-grid">
         @include('partials.skyline')
         <div class="container">
             <span class="eyebrow">Davao City · Philippine cinema</span>
             <h1>Cinema for the <span class="accent">Davao</span> film community</h1>
-            <p class="hero__lead">Reserve your seats for screenings, retrospectives and talks at Cinematheque Centre Davao. No account needed.</p>
-            <div class="cluster">
-                <a class="btn btn--primary" href="#now-showing">See what's showing <span class="arrow">&darr;</span></a>
-                <a class="btn btn--ghost" href="{{ route('bookings.lookup') }}">Find my booking</a>
-            </div>
+            <p class="hero__lead">Reserve seats for screenings, retrospectives and talks at Cinematheque Centre Davao. No account needed.</p>
 
-            @if ($featured)
-                @php($left = max(0, $featured->total_seats - $featured->reservation_seats_count))
-                <div class="feature reveal">
-                    <x-poster :screening="$featured" :tall="true">
-                        <span class="badge badge--gold badge--plain">Next up</span>
-                    </x-poster>
-                    <div>
-                        <span class="eyebrow">Next screening</span>
-                        <h2 style="font-size:var(--fs-2xl);color:#fff">{{ $featured->event_title }}</h2>
-                        <div class="cluster" style="gap:var(--s-4);margin:var(--s-4) 0">
-                            <x-date-badge :date="$featured->event_date" />
-                            <div>
-                                <div style="font-weight:600;color:#fff">{{ $featured->event_date->format('l, F j, Y') }}</div>
-                                <div class="muted">{{ substr($featured->start_time, 0, 5) }} – {{ substr($featured->end_time, 0, 5) }}</div>
-                            </div>
-                        </div>
-                        <div class="cluster" style="margin-bottom:var(--s-5)">
-                            <span class="badge {{ $featured->isPaid() ? 'badge--gold' : 'badge--success' }} badge--plain">{{ $featured->isPaid() ? '₱'.number_format($featured->price, 2).' per seat' : 'Free admission' }}</span>
-                            <span class="badge badge--dark badge--plain">{{ $left === 0 ? 'Fully booked' : $left.' of '.$featured->total_seats.' seats left' }}</span>
-                        </div>
-                        <div class="cluster">
-                            @if ($left > 0)
-                                <a class="btn btn--primary" href="{{ route('bookings.create', $featured) }}">Reserve seats <span class="arrow">&rarr;</span></a>
-                            @endif
-                            <a class="btn btn--ghost" href="{{ route('screenings.show', $featured) }}">Details</a>
-                        </div>
-                    </div>
-                </div>
-            @endif
+            <form class="filter-bar" method="GET" action="{{ route('home') }}" role="search" data-no-loading>
+                <label class="input-icon">
+                    <span class="sr-only">Search screenings</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                    <input type="search" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="Search by title or film">
+                </label>
+                <label>
+                    <span class="sr-only">Admission</span>
+                    <select name="type">
+                        <option value="">Free &amp; paid</option>
+                        <option value="free" @selected(($filters['type'] ?? '') === 'free')>Free only</option>
+                        <option value="paid" @selected(($filters['type'] ?? '') === 'paid')>Paid only</option>
+                    </select>
+                </label>
+                <button type="submit" class="btn btn--dark">Search</button>
+            </form>
         </div>
     </section>
-    <div class="filmstrip" aria-hidden="true"></div>
 @endsection
 
 @section('content')
-    <section id="now-showing" style="scroll-margin-top:90px">
-        <div class="section-head reveal">
+    <section id="now-showing">
+        <div class="section-head">
             <div>
-                <span class="eyebrow">Now scheduled</span>
                 <h2>Upcoming screenings</h2>
+                <p class="muted small" style="margin:4px 0 0">
+                    {{ $screenings->total() }} {{ Str::plural('screening', $screenings->total()) }}
+                    @if (array_filter($filters)) matching your search · <a href="{{ route('home') }}">clear</a>@endif
+                </p>
             </div>
-            @can('create', App\Models\Screening::class)
-                <a class="btn btn--dark btn--sm" href="{{ route('staff.screenings.create') }}">+ New screening (staff)</a>
-            @endcan
         </div>
 
         @if ($screenings->isEmpty())
             <div class="card">
-                <x-empty title="No screenings scheduled yet">New programmes are posted here as soon as they're confirmed. Please check back soon.</x-empty>
+                <x-empty :title="array_filter($filters) ? 'No screenings match your search' : 'No screenings scheduled yet'">
+                    {{ array_filter($filters) ? 'Try another title or show both free and paid screenings.' : 'New programmes are posted here as soon as they are confirmed.' }}
+                </x-empty>
             </div>
         @else
             <div class="grid grid-3">
@@ -78,17 +60,12 @@
 
     <hr class="divider-weave" aria-hidden="true">
 
-    <section class="reveal">
-        <div class="section-head">
-            <div>
-                <span class="eyebrow">How reservations work</span>
-                <h2>Three steps to your seat</h2>
-            </div>
-        </div>
+    <section>
+        <div class="section-head"><h2>How reservations work</h2></div>
         <ol class="steps">
-            <li><h3>Pick your seats</h3><p class="muted small">Choose up to {{ \App\Http\Requests\StoreReservationRequest::MAX_SEATS_PER_RESERVATION }} seats and name the person in each one.</p></li>
-            <li><h3>Pay if it's a paid screening</h3><p class="muted small">Scan the Cinematheque QR with your e-wallet or bank app, then upload a screenshot. Staff confirm it — we never process payments ourselves.</p></li>
-            <li><h3>Show your reference</h3><p class="muted small">Give your booking reference at the door. Staff admit each attendee on arrival.</p></li>
+            <li><h3>Pick your seats</h3><p class="muted small" style="margin:0">Choose up to {{ \App\Http\Requests\StoreReservationRequest::MAX_SEATS_PER_RESERVATION }} seats and name the person in each one.</p></li>
+            <li><h3>Pay, or wait for approval</h3><p class="muted small" style="margin:0">Paid screenings: pay securely through PayMongo (GCash, Maya or card). Free screenings: staff approve your booking.</p></li>
+            <li><h3>Bring your e-ticket</h3><p class="muted small" style="margin:0">Your e-ticket is emailed once the booking is approved. Staff admit each attendee at the door.</p></li>
         </ol>
     </section>
 @endsection

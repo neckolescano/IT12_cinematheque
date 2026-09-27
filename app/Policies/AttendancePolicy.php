@@ -8,13 +8,14 @@ use App\Models\User;
 class AttendancePolicy extends StaffPolicy
 {
     /**
-     * Check-in: called as Gate::authorize('checkIn', [Attendance::class, $reservationSeat]).
-     * One admission per seat, and never for a cancelled reservation.
+     * Admit: called as Gate::authorize('checkIn', [Attendance::class, $reservationSeat]).
+     * Only a confirmed reservation can be admitted (paid ones are confirmed only once
+     * PayMongo reports the payment), and each seat is admitted at most once.
      */
     public function checkIn(User $user, ReservationSeat $reservationSeat): bool
     {
         return $this->isStaff($user)
-            && $reservationSeat->reservation->status !== 'cancelled'
+            && $reservationSeat->reservation->status === 'confirmed'
             && ! $reservationSeat->attendance()->exists();
     }
 }

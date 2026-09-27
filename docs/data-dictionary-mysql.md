@@ -151,16 +151,23 @@ Composite primary key: `(movie_id, genre_id)`.
 | pwd_indicator | BOOLEAN (TINYINT(1)) | No | | 0 | Person with disability |
 
 ### Table 14: payments
+Online payment through PayMongo hosted Checkout. The status becomes `verified` only when PayMongo's API reports the session as paid.
+
 | Field | MySQL type | Null | Key | Default | Description |
 |---|---|---|---|---|---|
 | payment_id | BIGINT UNSIGNED AUTO_INCREMENT | No | PK | | Payment ID |
 | reservation_id | BIGINT UNSIGNED | No | UNIQUE, FK → reservations (CASCADE) | | At most one payment per reservation |
 | amount | DECIMAL(8,2) | No | | | Price × seat count |
-| payment_channel | VARCHAR(30) | Yes | | NULL | Self-reported e-wallet or bank |
-| status | ENUM('pending','verified','rejected') | No | | 'pending' | Never verified just because it was created |
-| created_at | DATETIME | No | | CURRENT_TIMESTAMP | When the moviegoer reached the Payment Screen |
+| payment_channel | VARCHAR(30) | Yes | | NULL | Method reported by PayMongo, e.g. `gcash`, `card` |
+| status | ENUM('pending','verified','rejected') | No | | 'pending' | `verified` = PayMongo reported it paid |
+| provider_session_id | VARCHAR(64) | Yes | UNIQUE | NULL | PayMongo Checkout Session ID (`cs_…`). *Added 2026-09-26* |
+| provider_payment_id | VARCHAR(64) | Yes | | NULL | PayMongo payment ID (`pay_…`), quoted for refunds or disputes. *Added 2026-09-26* |
+| paid_at | DATETIME | Yes | | NULL | When PayMongo recorded the payment. *Added 2026-09-26* |
+| created_at | DATETIME | No | | CURRENT_TIMESTAMP | When the payment record was created (reservation submitted) |
 
-### Table 15: payment_proofs
+### Table 15: payment_proofs *(retired, kept as history)*
+Used by the old QR + screenshot flow, which PayMongo replaced on 2026-09-26. The app no longer writes to this table. Any existing rows are shown read-only on the staff reservation page.
+
 | Field | MySQL type | Null | Key | Default | Description |
 |---|---|---|---|---|---|
 | proof_id | BIGINT UNSIGNED AUTO_INCREMENT | No | PK | | Proof submission ID |
@@ -172,7 +179,9 @@ Composite primary key: `(movie_id, genre_id)`.
 | reviewed_at | DATETIME | Yes | | NULL | Review time |
 | rejection_reason | VARCHAR(255) | Yes | | NULL | Staff note when rejected |
 
-### Table 16: payment_qr_codes
+### Table 16: payment_qr_codes *(retired, kept as history)*
+Replaced by PayMongo on 2026-09-26. The app no longer reads or writes this table.
+
 | Field | MySQL type | Null | Key | Default | Description |
 |---|---|---|---|---|---|
 | qr_code_id | BIGINT UNSIGNED AUTO_INCREMENT | No | PK | | QR record ID |
@@ -182,11 +191,12 @@ Composite primary key: `(movie_id, genre_id)`.
 | uploaded_at | DATETIME | No | | CURRENT_TIMESTAMP | Upload time |
 
 ### Table 17: attendances
+A row exists only when staff admit the person at the door; no row = not (yet) attended / no-show. `control_number` was **removed** on 2026-09-26 (migration `2026_09_26_000001`): the official physical-ticket number is outside this system, and the booking reference is the system's own admission reference.
+
 | Field | MySQL type | Null | Key | Default | Description |
 |---|---|---|---|---|---|
 | attendance_id | BIGINT UNSIGNED AUTO_INCREMENT | No | PK | | Admission record ID |
 | reservation_seat_id | BIGINT UNSIGNED | No | UNIQUE, FK → reservation_seats (RESTRICT) | | Seat admitted (at most once) |
-| control_number | VARCHAR(20) | Yes | UNIQUE | NULL | Number from the physical FDCP ticket, typed in by staff. MySQL allows several NULLs in a UNIQUE column |
 | remarks | TEXT | Yes | | NULL | Staff notes |
 | checked_in_at | DATETIME | No | | | Admission time |
 | checked_in_by | BIGINT UNSIGNED | No | FK → users.user_id (RESTRICT) | | Staff member who admitted the attendee |

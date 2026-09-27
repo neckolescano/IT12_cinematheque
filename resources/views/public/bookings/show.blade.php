@@ -4,160 +4,136 @@
 
 @php
     $screening = $reservation->screening;
+    $movie = $screening->movie;
     $paid = (bool) $payment;
     $cancelled = $reservation->status === 'cancelled';
-    $done = $reservation->status === 'confirmed';
-    $step = $done ? ($paid ? 4 : 3) : ($paid ? 3 : 2);
-    $awaitingReview = $paid && $payment->hasPendingProof();
+    $approved = $reservation->status === 'confirmed';
+    $step = $approved ? ($paid ? 4 : 3) : ($paid ? 3 : 2);
+    $seatLabels = $reservation->reservationSeats->pluck('seat.seat_label');
+    $methodNames = ['card' => 'Card', 'gcash' => 'GCash', 'paymaya' => 'Maya', 'grab_pay' => 'GrabPay', 'qrph' => 'QR Ph', 'shopee_pay' => 'ShopeePay', 'billease' => 'BillEase'];
+    $methods = collect(config('services.paymongo.payment_method_types'))->map(fn ($m) => $methodNames[$m] ?? ucfirst($m))->take(3);
+
+    [$stateIcon, $headline, $subline] = match (true) {
+        $cancelled => ['cancelled', 'Reservation cancelled', 'This booking can no longer be used for admission.'],
+        $approved => ['success', 'Booking confirmed', 'Your e-ticket has been emailed to '.$reservation->lead_email.'.'],
+        default => ['pending', 'Reservation received', 'Waiting for staff approval. Your e-ticket will be emailed to '.$reservation->lead_email.' once approved.'],
+    };
 @endphp
 
-@section('hero')
-    <section class="hero hero--compact tex-grid on-dark">
-        @include('partials.skyline')
-        <div class="container">
-            @unless ($cancelled)
-                <x-stepper :current="$step" :paid="$paid" class="no-print" />
-            @endunless
-            <span class="eyebrow">Booking reference</span>
-            <h1 style="letter-spacing:.04em">{{ $reservation->booking_reference }}</h1>
-            <div class="cluster">
-                <x-status :value="$reservation->status" label="Reservation" />
-                @if ($paid)
-                    <x-status :value="$awaitingReview ? 'awaiting review' : $payment->status" label="Payment" />
-                @endif
-                <span class="muted small">Save this reference — you'll need it at the door and to come back to this page.</span>
-            </div>
-        </div>
-    </section>
-@endsection
-
 @section('content')
-    @if ($cancelled)
-        <div class="alert alert--error">This reservation has been cancelled. Please contact Cinematheque Centre Davao if you think this is a mistake.</div>
-    @elseif ($done)
-        <div class="alert alert--success">
-            <div><strong>You're all set.</strong> Show the booking reference <strong>{{ $reservation->booking_reference }}</strong> at the entrance. Each attendee is admitted by staff on arrival.</div>
-        </div>
-    @endif
+    @unless ($cancelled)
+        <x-stepper :current="$step" :paid="$paid" class="no-print" />
+    @endunless
 
-    <div class="grid grid-2" style="align-items:start">
-        {{-- Payment Screen (paid screenings only) --}}
-        @if ($paid)
-            <section class="card reveal" aria-labelledby="pay-title">
-                <div class="card__head">
-                    <h2 id="pay-title">Payment</h2>
-                    <x-status :value="$payment->status" />
-                </div>
-                <dl class="kv" style="margin-bottom:var(--s-5)">
-                    <dt>Amount due</dt><dd style="font-size:var(--fs-xl);font-weight:800">₱{{ number_format($payment->amount, 2) }}</dd>
-                    @if ($payment->payment_channel)
-                        <dt>Paid via</dt><dd>{{ $payment->payment_channel }} <span class="muted small">(as you reported)</span></dd>
-                    @endif
-                </dl>
-
-                @if ($payment->status !== 'verified' && ! $cancelled)
-                    <ol class="small" style="padding-left:1.2em;margin:0 0 var(--s-5)">
-                        <li>Scan the QR below with your e-wallet or banking app and pay exactly <strong>₱{{ number_format($payment->amount, 2) }}</strong>.</li>
-                        <li>Take a screenshot of the successful transfer.</li>
-                        <li>Upload the screenshot here. Staff review it; your reservation is confirmed only after they accept it.</li>
-                    </ol>
-
-                    <div style="text-align:center;background:var(--bg);border-radius:var(--r-md);padding:var(--s-5);margin-bottom:var(--s-5)">
-                        @if ($qrCode)
-                            <img src="{{ asset('storage/'.$qrCode->qr_image) }}" alt="Cinematheque Centre Davao payment QR code" style="width:220px;max-width:100%;margin:0 auto;border-radius:var(--r-sm);background:#fff;padding:8px;box-shadow:var(--shadow-md);image-rendering:pixelated">
-                            <p class="small muted" style="margin:var(--s-3) 0 0">Cinematheque's official payment QR. This site never takes your money directly.</p>
-                        @else
-                            <x-empty title="Payment QR not available yet" icon="doc">Please check back later or contact Cinematheque Centre Davao.</x-empty>
-                        @endif
-                    </div>
-                @endif
-
-                @if ($canUploadProof)
-                    <form method="POST" action="{{ route('bookings.proof.store', $reservation) }}" enctype="multipart/form-data">
-                        @csrf
-                        <h3>Upload proof of payment</h3>
-                        <div class="field @error('payment_channel') has-error @enderror">
-                            <label for="payment_channel">E-wallet or bank used</label>
-                            <input type="text" id="payment_channel" name="payment_channel" value="{{ old('payment_channel', $payment->payment_channel) }}" maxlength="30" placeholder="e.g. GCash, Maya, BPI">
-                            @error('payment_channel') <span class="field__error">{{ $message }}</span> @enderror
-                        </div>
-                        <div class="field @error('proof_image') has-error @enderror">
-                            <label for="proof_image">Screenshot <span class="req">*</span></label>
-                            <div class="file-drop">
-                                <input type="file" id="proof_image" name="proof_image" accept="image/*" required data-preview="proof-preview">
-                                <div class="hint">JPG or PNG, up to 5 MB</div>
-                                <img id="proof-preview" class="file-preview" alt="Selected screenshot preview" hidden>
-                            </div>
-                            @error('proof_image') <span class="field__error">{{ $message }}</span> @enderror
-                        </div>
-                        <button type="submit" class="btn btn--primary btn--block">Upload proof</button>
-                    </form>
-                @elseif ($awaitingReview)
-                    <div class="alert alert--warning" style="margin:0">
-                        <div><strong>Your proof is awaiting staff review.</strong> This page updates once it's checked — come back with your booking reference.</div>
-                    </div>
-                @endif
-
-                @if ($payment->proofs->isNotEmpty())
-                    <h3 style="margin-top:var(--s-5)">Your uploads</h3>
-                    <div class="table-wrap">
-                        <table class="table">
-                            <thead><tr><th>Submitted</th><th>Status</th><th>Note from staff</th></tr></thead>
-                            <tbody>
-                            @foreach ($payment->proofs->sortByDesc('submitted_at') as $proof)
-                                <tr>
-                                    <td>{{ $proof->submitted_at->format('M j, Y H:i') }}</td>
-                                    <td><x-status :value="$proof->status" /></td>
-                                    <td>{{ $proof->rejection_reason ?? '—' }}</td>
-                                </tr>
-                            @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                @endif
-            </section>
+    @if ($canPay)
+        {{-- Unpaid (paid screening): payment + summary, as in the payment-step reference --}}
+        @if ($paymentCancelled)
+            <div class="alert alert--warning"><div>Payment was not completed. Your seats are still held. You can try again below.</div></div>
         @endif
 
-        {{-- Booking summary --}}
-        <section class="card reveal" aria-labelledby="summary-title">
-            <div class="card__head">
-                <h2 id="summary-title">Your booking</h2>
-                <button type="button" class="btn btn--ghost btn--sm no-print" onclick="window.print()">Print</button>
-            </div>
-            <div class="screening-card__meta" style="margin-bottom:var(--s-4)">
-                <x-date-badge :date="$screening->event_date" />
-                <div>
-                    <div style="font-weight:700">{{ $screening->event_title }}</div>
-                    <div class="muted small">{{ $screening->event_date->format('l, F j, Y') }} · {{ substr($screening->start_time, 0, 5) }}</div>
-                </div>
-            </div>
-            <dl class="kv" style="margin-bottom:var(--s-5)">
-                <dt>Booked by</dt><dd>{{ $reservation->lead_full_name }}</dd>
-                <dt>Contact</dt><dd>{{ $reservation->lead_contact_no }}</dd>
-                <dt>Submitted</dt><dd>{{ $reservation->reservation_datetime->format('M j, Y H:i') }}</dd>
-                @unless ($paid)
-                    <dt>Admission</dt><dd>Free — no payment needed</dd>
-                @endunless
-            </dl>
-            <div class="table-wrap">
-                <table class="table">
-                    <thead><tr><th>Seat</th><th>Attendee</th></tr></thead>
-                    <tbody>
-                    @foreach ($reservation->reservationSeats as $rs)
-                        <tr>
-                            <td><span class="badge badge--gold badge--plain">{{ $rs->seat->seat_label }}</span></td>
-                            <td>
-                                {{ $rs->attendee?->full_name }}
-                                @if ($rs->attendee?->is_lead_reserver) <span class="muted small">(booker)</span> @endif
-                            </td>
-                        </tr>
+        <div class="booking-layout">
+            <section class="card">
+                <h1 class="card__title" style="font-size:var(--fs-xl)">
+                    <span class="card__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
+                    Complete your payment
+                </h1>
+                <p class="muted small">Booking <strong style="color:var(--text);letter-spacing:.04em">{{ $reservation->booking_reference }}</strong> is held for you. It is confirmed, and your e-ticket sent, as soon as PayMongo reports the payment.</p>
+
+                <h2 class="label" style="margin:var(--s-5) 0 var(--s-3)">Pay securely through PayMongo with</h2>
+                <div class="pay-methods">
+                    @foreach ($methods as $name)
+                        <div class="pay-method">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">@if ($name === 'Card')<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>@else<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/>@endif</svg>
+                            {{ $name }}
+                        </div>
                     @endforeach
-                    </tbody>
-                </table>
+                </div>
+
+                <div class="summary__total" style="border-top:0;padding-top:0">
+                    <span class="muted">Amount due</span>
+                    <strong>₱{{ number_format($payment->amount, 2) }}</strong>
+                </div>
+
+                @if ($paymentsEnabled)
+                    <a class="btn btn--primary btn--lg btn--block" href="{{ route('bookings.pay', $reservation) }}">Pay ₱{{ number_format($payment->amount, 2) }} with PayMongo <span class="arrow" aria-hidden="true">&rarr;</span></a>
+                    <p class="secure-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>You'll enter your payment details on PayMongo's secure page. This site never sees your card or wallet details.</p>
+                    @if ($payment->provider_session_id)
+                        <p class="small" style="margin:var(--s-4) 0 0">Already paid? <a href="{{ route('bookings.payment.return', $reservation) }}">Check payment status</a></p>
+                    @endif
+                @else
+                    <div class="alert alert--warning" style="margin:0"><div>Online payment is temporarily unavailable. Your seats are held — please try again later.</div></div>
+                @endif
+            </section>
+
+            <x-booking-summary :screening="$screening" :seat-labels="$seatLabels" :booked-by="$reservation->lead_full_name">
+                <p class="summary__hint" style="margin-top:0">Reference {{ $reservation->booking_reference }} · <a href="{{ route('bookings.lookup') }}">find it again later</a></p>
+            </x-booking-summary>
+        </div>
+    @else
+        {{-- Confirmed / waiting for approval / cancelled: the confirmation (e-ticket) layout --}}
+        <div class="confirm">
+            <span class="confirm__icon confirm__icon--{{ $stateIcon }}" aria-hidden="true">
+                @if ($stateIcon === 'success')
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m5 12 5 5 9-10"/></svg>
+                @elseif ($stateIcon === 'pending')
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                @else
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                @endif
+            </span>
+            <h1>{{ $headline }}</h1>
+            <p class="muted">{{ $subline }}</p>
+
+            <article class="card ticket" aria-label="{{ $approved ? 'E-ticket' : 'Booking details' }}">
+                <div class="ticket__top">
+                    <x-poster :screening="$screening" class="poster--thumb" />
+                    <div>
+                        <strong style="font-size:var(--fs-lg)">{{ $screening->event_title }}</strong>
+                        <div class="dot-list" style="margin-top:4px">
+                            @if ($movie?->genres->isNotEmpty())<span>{{ $movie->genres->pluck('genre_name')->take(2)->join(', ') }}</span>@endif
+                            @if ($movie?->rating)<span>{{ $movie->rating }}</span>@endif
+                            <span>{{ $approved ? 'Approved' : ucfirst($reservation->status) }}</span>
+                        </div>
+                    </div>
+                    <div class="ticket__ref"><span>Booking reference</span><strong>{{ $reservation->booking_reference }}</strong></div>
+                </div>
+                <dl class="ticket__grid">
+                    <div><dt>Date</dt><dd>{{ $screening->event_date->format('l, F j, Y') }}</dd></div>
+                    <div><dt>Time</dt><dd>{{ \Carbon\Carbon::parse($screening->start_time)->format('g:i A') }}</dd></div>
+                    <div><dt>Seats</dt><dd>{{ $seatLabels->join(', ') }}</dd></div>
+                    <div><dt>{{ $paid ? 'Amount' : 'Admission' }}</dt><dd>{{ $paid ? '₱'.number_format($payment->amount, 2).($payment->isPaid() ? ' · paid' : '') : 'Free' }}</dd></div>
+                    <div style="grid-column:1 / -1">
+                        <dt>Attendees</dt>
+                        <dd>
+                            @foreach ($reservation->reservationSeats as $rs)
+                                <span style="display:inline-block;margin:2px 12px 2px 0">{{ $rs->seat->seat_label }} — {{ $rs->attendee?->full_name }}@if ($rs->attendee?->is_lead_reserver) <span class="muted small">(booker)</span>@endif</span>
+                            @endforeach
+                        </dd>
+                    </div>
+                </dl>
+                <div class="ticket__foot">
+                    @if ($approved)
+                        Show this e-ticket or the booking reference at the entrance. Each attendee is admitted by staff on arrival.
+                    @elseif ($cancelled)
+                        {{ $payment?->isPaid() ? 'A payment was recorded — contact Cinematheque Centre Davao about a refund.' : 'Contact Cinematheque Centre Davao if you think this is a mistake.' }}
+                    @else
+                        Keep your booking reference. You can check this page anytime from "Find my booking".
+                    @endif
+                </div>
+            </article>
+
+            <div class="confirm__actions no-print">
+                @if ($approved)
+                    <button type="button" class="btn btn--primary" onclick="window.print()">Print / save e-ticket</button>
+                @else
+                    <a class="btn btn--primary" href="{{ route('bookings.lookup') }}">Find my booking</a>
+                @endif
+                <a class="btn btn--ghost" href="{{ route('home') }}">Back to screenings</a>
             </div>
+
             @can('view', $reservation)
-                <p class="small no-print" style="margin:var(--s-4) 0 0"><a href="{{ route('staff.reservations.show', $reservation) }}">Staff view of this reservation &rarr;</a></p>
+                <p class="small no-print" style="margin-top:var(--s-5)"><a href="{{ route('staff.reservations.show', $reservation) }}">Staff view of this reservation &rarr;</a></p>
             @endcan
-        </section>
-    </div>
+        </div>
+    @endif
 @endsection

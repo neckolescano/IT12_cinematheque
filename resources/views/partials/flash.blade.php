@@ -6,6 +6,14 @@
     </div>
 @endif
 
+@if (session('warning'))
+    <div class="alert alert--warning" role="alert">
+        <svg class="alert__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><path d="M12 10v4M12 18h.01"/></svg>
+        <div>{{ session('warning') }}</div>
+        <button type="button" class="alert__close" data-dismiss aria-label="Dismiss">&times;</button>
+    </div>
+@endif
+
 @if ($errors->any())
     <div class="alert alert--error" role="alert">
         <svg class="alert__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 7v6M12 17h.01"/></svg>

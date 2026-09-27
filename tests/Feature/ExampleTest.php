@@ -11,6 +11,7 @@ class ExampleTest extends TestCase
 
     public function test_the_home_page_lists_screenings(): void
     {
-        $this->get('/')->assertOk()->assertSee('Upcoming screenings');
+        $this->get('/')->assertRedirect('/cinemathequecentredavao');
+        $this->get('/cinemathequecentredavao')->assertOk()->assertSee('Upcoming screenings');
     }
 }

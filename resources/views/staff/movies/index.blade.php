@@ -3,6 +3,7 @@
 @section('title', 'Movies')
 
 @section('content')
+    @include('staff.partials.catalog-tabs')
     <div class="page-head">
         <div>
             <span class="eyebrow">Catalog</span>

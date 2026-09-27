@@ -174,9 +174,13 @@ CREATE TABLE `payments` (
   `amount` decimal(8,2) NOT NULL,
   `payment_channel` varchar(30) DEFAULT NULL,
   `status` enum('pending','verified','rejected') NOT NULL DEFAULT 'pending',
+  `provider_session_id` varchar(64) DEFAULT NULL,
+  `provider_payment_id` varchar(64) DEFAULT NULL,
+  `paid_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`payment_id`),
   UNIQUE KEY `payments_reservation_id_unique` (`reservation_id`),
+  UNIQUE KEY `payments_provider_session_id_unique` (`provider_session_id`),
   CONSTRAINT `payments_reservation_id_foreign` FOREIGN KEY (`reservation_id`) REFERENCES `reservations` (`reservation_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -211,13 +215,11 @@ CREATE TABLE `payment_qr_codes` (
 CREATE TABLE `attendances` (
   `attendance_id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `reservation_seat_id` bigint unsigned NOT NULL,
-  `control_number` varchar(20) DEFAULT NULL,
   `remarks` text DEFAULT NULL,
   `checked_in_at` datetime NOT NULL,
   `checked_in_by` bigint unsigned NOT NULL,
   PRIMARY KEY (`attendance_id`),
   UNIQUE KEY `attendances_reservation_seat_id_unique` (`reservation_seat_id`),
-  UNIQUE KEY `attendances_control_number_unique` (`control_number`),
   KEY `attendances_checked_in_by_foreign` (`checked_in_by`),
   CONSTRAINT `attendances_checked_in_by_foreign` FOREIGN KEY (`checked_in_by`) REFERENCES `users` (`user_id`),
   CONSTRAINT `attendances_reservation_seat_id_foreign` FOREIGN KEY (`reservation_seat_id`) REFERENCES `reservation_seats` (`reservation_seat_id`)

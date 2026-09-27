@@ -44,12 +44,12 @@ class ReservationFlowTest extends TestCase
         $screening = Screening::factory()->create();
         $seat = Seat::first();
 
-        $this->get(route('bookings.create', $screening))->assertOk()->assertSee('Choose your seats');
+        $this->get(route('bookings.create', $screening))->assertOk()->assertSee('Select your seats');
         $this->get(route('bookings.create', [$screening, 'seats' => [$seat->seat_id]]))
             ->assertOk()->assertSee('Attendee for seat '.$seat->seat_label);
     }
 
-    public function test_free_reservation_creates_seats_and_attendees_and_is_confirmed(): void
+    public function test_free_reservation_creates_seats_and_attendees_and_waits_for_approval(): void
     {
         $screening = Screening::factory()->create();
         $seatIds = Seat::limit(3)->pluck('seat_id')->all();
@@ -58,7 +58,7 @@ class ReservationFlowTest extends TestCase
 
         $reservation = Reservation::firstOrFail();
         $response->assertRedirect(route('bookings.show', $reservation));
-        $this->assertSame('confirmed', $reservation->status);
+        $this->assertSame('pending', $reservation->status); // approved by staff → e-ticket
         $this->assertCount(3, $reservation->reservationSeats);
         $this->assertCount(3, $reservation->attendees);
         $this->assertSame(1, $reservation->attendees()->where('is_lead_reserver', true)->count());
@@ -73,12 +73,22 @@ class ReservationFlowTest extends TestCase
         $screening = Screening::factory()->paid(150)->create();
         $seatIds = Seat::limit(2)->pluck('seat_id')->all();
 
-        $this->post(route('bookings.store', $screening), $this->payload($seatIds))->assertRedirect();
+        $response = $this->post(route('bookings.store', $screening), $this->payload($seatIds));
 
         $reservation = Reservation::firstOrFail();
+        $response->assertRedirect(route('bookings.pay', $reservation)); // straight on to PayMongo
         $this->assertSame('pending', $reservation->status);
         $this->assertSame('pending', $reservation->payment->status);
         $this->assertSame('300.00', $reservation->payment->amount);
+    }
+
+    public function test_booker_email_is_required_for_the_e_ticket(): void
+    {
+        $screening = Screening::factory()->create();
+
+        $this->post(route('bookings.store', $screening), $this->payload([Seat::first()->seat_id], ['lead_email' => '']))
+            ->assertSessionHasErrors('lead_email');
+        $this->assertDatabaseCount('reservations', 0);
     }
 
     public function test_every_seat_needs_exactly_one_attendee(): void

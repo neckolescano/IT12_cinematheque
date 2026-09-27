@@ -16,6 +16,7 @@ body { background: #ffffff; margin: 16px; font-family: system-ui, sans-serif; }
 <h1>Cinematheque Centre Davao: ERD (MySQL data types)</h1>
 <p>Same entities and relationships as the original ERD, with MySQL column types. Mermaid can't show spaces in a type, so <code>BIGINT_UNSIGNED</code> means <code>BIGINT UNSIGNED</code>. <code>BOOLEAN</code> is stored as <code>TINYINT(1)</code>.</p>
 <p>Four relationship lines differ from the original ERD so that they match the written business rules in <code>implementation.md</code>: Movie–Screening is optional on the movie side (rule 2), a Reservation has <em>one or more</em> seats (rule 7), a Payment has <em>one or more</em> proofs (rule 12), and a proof has <em>zero or one</em> reviewer (rule 14). The tables and keys are unchanged.</p>
+<p><strong>2026-09-26 revision:</strong> <code>attendances.control_number</code> removed; PayMongo fields added to <code>payments</code>. <code>payment_proofs</code> and <code>payment_qr_codes</code> are retired (kept as history).</p>
 <div id="erd-mysql"></div>
 <script type="module">
 import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
@@ -125,6 +126,9 @@ const src = `erDiagram
     DECIMAL amount "(8,2)"
     VARCHAR(30) payment_channel "NULL"
     ENUM status "pending, verified, rejected"
+    VARCHAR(64) provider_session_id UK "PayMongo cs_; NULL"
+    VARCHAR(64) provider_payment_id "PayMongo pay_; NULL"
+    DATETIME paid_at "NULL"
     DATETIME created_at "DEFAULT CURRENT_TIMESTAMP"
   }
   PAYMENT_PROOFS {
@@ -147,7 +151,6 @@ const src = `erDiagram
   ATTENDANCES {
     BIGINT_UNSIGNED attendance_id PK "AUTO_INCREMENT"
     BIGINT_UNSIGNED reservation_seat_id FK,UK
-    VARCHAR(20) control_number UK "NULL"
     TEXT remarks "NULL"
     DATETIME checked_in_at
     BIGINT_UNSIGNED checked_in_by FK

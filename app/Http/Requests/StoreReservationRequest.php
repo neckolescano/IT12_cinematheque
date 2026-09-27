@@ -36,7 +36,8 @@ class StoreReservationRequest extends FormRequest
             'lead_middle_name' => ['nullable', 'string', 'max:50'],
             'lead_last_name' => ['required', 'string', 'max:50'],
             'lead_contact_no' => ['required', 'string', 'max:20'],
-            'lead_email' => ['nullable', 'email', 'max:100'],
+            // Required: the pending notice and the e-ticket are emailed here.
+            'lead_email' => ['required', 'email', 'max:100'],
             'lead_seat_id' => ['nullable', 'integer', Rule::in($this->input('seat_ids', []))],
 
             'attendees' => ['required', 'array'],

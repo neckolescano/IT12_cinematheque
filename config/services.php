@@ -35,4 +35,15 @@ return [
         ],
     ],
 
+    /*
+    | PayMongo hosted Checkout (sandbox during development).
+    | Keys come only from .env — test keys start with sk_test_ / pk_test_.
+    */
+    'paymongo' => [
+        'secret_key' => env('PAYMONGO_SECRET_KEY'),
+        'webhook_secret' => env('PAYMONGO_WEBHOOK_SECRET'),
+        'base_url' => env('PAYMONGO_BASE_URL', 'https://api.paymongo.com/v1'),
+        'payment_method_types' => array_filter(array_map('trim', explode(',', env('PAYMONGO_PAYMENT_METHODS', 'card,gcash,paymaya')))),
+    ],
+
 ];

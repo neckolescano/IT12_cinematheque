@@ -11,12 +11,14 @@
 @section('content')
     <div class="page-head">
         <div>
-            <a class="crumb" style="color:var(--muted);margin-bottom:var(--s-1)" href="{{ route('staff.screenings.show', $screening) }}">&larr; {{ $screening->event_title }}</a>
-            <h1 style="letter-spacing:.03em">{{ $reservation->booking_reference }}</h1>
-            <div class="cluster">
-                <x-status :value="$reservation->status" label="Reservation" />
+            <a class="crumb" href="{{ route('staff.screenings.show', $screening) }}">&larr; {{ $screening->event_title }}</a>
+            <h1 style="letter-spacing:.02em">{{ $reservation->booking_reference }}</h1>
+            <div class="cluster" style="margin-top:6px">
+                <x-status :value="$reservation->status === 'confirmed' ? 'approved' : $reservation->status" label="Reservation" />
                 @if ($payment)
-                    <x-status :value="$payment->status" label="Payment" />
+                    <x-status :value="$payment->isPaid() ? 'paid' : 'unpaid'" label="Payment" />
+                @else
+                    <span class="badge badge--neutral badge--plain">Free screening</span>
                 @endif
                 <span class="badge badge--neutral badge--plain">{{ $admitted }} / {{ $reservation->reservationSeats->count() }} admitted</span>
             </div>
@@ -25,124 +27,109 @@
             @can('confirm', $reservation)
                 <form class="inline-form" method="POST" action="{{ route('staff.reservations.confirm', $reservation) }}">
                     @csrf @method('PATCH')
-                    <button type="submit" class="btn btn--success">Confirm reservation</button>
+                    <button type="submit" class="btn btn--success">Approve &amp; send e-ticket</button>
                 </form>
             @endcan
+            <form class="inline-form" method="POST" action="{{ route('staff.reservations.resend', $reservation) }}">
+                @csrf
+                <button type="submit" class="btn btn--ghost" title="Send the email for the current status again">Resend email</button>
+            </form>
             @can('cancel', $reservation)
                 <form class="inline-form" method="POST" action="{{ route('staff.reservations.cancel', $reservation) }}"
-                      data-confirm="Cancel {{ $reservation->booking_reference }}? The seats stay held as history and attendees can no longer be checked in." data-confirm-label="Cancel reservation">
+                      data-confirm="Cancel {{ $reservation->booking_reference }}? The customer is emailed and nobody on it can be admitted. Seats stay held as history." data-confirm-label="Cancel reservation">
                     @csrf @method('PATCH')
-                    <button class="btn btn--danger" type="submit">Cancel reservation</button>
+                    <button class="btn btn--danger" type="submit">Cancel</button>
                 </form>
             @endcan
         </div>
     </div>
 
-    @if ($screening->isPaid() && $payment?->status !== 'verified' && $reservation->status !== 'cancelled')
-        <div class="alert alert--warning">
-            <div><strong>Payment not yet verified.</strong> Check the proof below before admitting anyone.</div>
-        </div>
+    @if ($reservation->status === 'cancelled' && $payment?->isPaid())
+        <div class="alert alert--warning">This booking was paid through PayMongo but is cancelled. A refund may be due. Quote PayMongo payment <strong>{{ $payment->provider_payment_id ?? 'ID not recorded' }}</strong>.</div>
     @endif
 
-    <div class="grid" style="grid-template-columns:minmax(0,1fr);gap:var(--s-5)">
-        <section class="card reveal">
+    <div class="grid grid-2" style="align-items:start;margin-bottom:20px">
+        <section class="card">
             <div class="card__head"><h2>Booking</h2></div>
             <dl class="kv">
-                <dt>Screening</dt><dd>{{ $screening->event_title }} · {{ $screening->event_date->format('M j, Y') }} {{ substr($screening->start_time, 0, 5) }}</dd>
+                <dt>Screening</dt><dd><a href="{{ route('staff.screenings.show', $screening) }}">{{ $screening->event_title }}</a></dd>
+                <dt>When</dt><dd>{{ $screening->event_date->format('D, M j, Y') }} · {{ \Carbon\Carbon::parse($screening->start_time)->format('g:i A') }}</dd>
                 <dt>Booked by</dt><dd>{{ $reservation->lead_full_name }}</dd>
-                <dt>Contact</dt><dd>{{ $reservation->lead_contact_no }} @if ($reservation->lead_email) · {{ $reservation->lead_email }} @endif</dd>
-                <dt>Submitted</dt><dd>{{ $reservation->reservation_datetime->format('M j, Y H:i') }}</dd>
+                <dt>Email</dt><dd>{{ $reservation->lead_email ?? '—' }}</dd>
+                <dt>Contact</dt><dd>{{ $reservation->lead_contact_no }}</dd>
+                <dt>Submitted</dt><dd>{{ $reservation->reservation_datetime->format('M j, Y g:i A') }}</dd>
             </dl>
         </section>
 
-        <section class="card reveal">
+        <section class="card">
             <div class="card__head">
-                <h2>Attendees &amp; admission</h2>
-                <span class="muted small">Confirm each person against their declared details, then check them in.</span>
+                <h2>Payment</h2>
+                @if ($payment?->provider_session_id && ! $payment->isPaid())
+                    <form class="inline-form" method="POST" action="{{ route('staff.reservations.sync-payment', $reservation) }}">
+                        @csrf
+                        <button type="submit" class="btn btn--ghost btn--sm">Refresh from PayMongo</button>
+                    </form>
+                @endif
             </div>
-            <div class="table-wrap">
-                <table class="table">
-                    <thead><tr><th>Seat</th><th>Declared attendee</th><th>Details</th><th style="min-width:260px">Admission</th></tr></thead>
-                    <tbody>
-                    @foreach ($reservation->reservationSeats as $rs)
-                        @php($a = $rs->attendee)
-                        <tr>
-                            <td><span class="badge badge--gold badge--plain">{{ $rs->seat->seat_label }}</span></td>
-                            <td>
-                                <strong>{{ $a?->full_name }}</strong>
-                                @if ($a?->is_lead_reserver) <div class="muted small">Booker</div> @endif
-                            </td>
-                            <td class="small">
-                                @if ($a)
-                                    <div>Age {{ $a->age ?? '—' }} · Sex {{ $a->sex ?? '—' }}</div>
-                                    @if ($a->company_school) <div>{{ $a->company_school }}</div> @endif
-                                    @if ($a->contact_no || $a->email) <div class="muted">{{ $a->contact_no }} {{ $a->email }}</div> @endif
-                                    <div class="cluster" style="margin-top:4px">
-                                        @if ($a->senior_card_no) <span class="badge badge--plain">Senior · {{ $a->senior_card_no }}</span> @endif
-                                        @if ($a->pwd_indicator) <span class="badge badge--plain">PWD</span> @endif
-                                    </div>
-                                @endif
-                            </td>
-                            <td>
-                                @if ($att = $rs->attendance)
-                                    <div class="cluster" style="margin-bottom:var(--s-2)">
-                                        <x-status value="checked in" />
-                                        <span class="muted small">{{ $att->checked_in_at->format('M j H:i') }} · {{ $att->checkedInBy->full_name }}</span>
-                                    </div>
-                                    @can('update', $att)
-                                        <form class="checkin" method="POST" action="{{ route('staff.attendances.update', $att) }}">
-                                            @csrf @method('PATCH')
-                                            <div class="field">
-                                                <label for="cn{{ $att->attendance_id }}">Control no.</label>
-                                                <input type="text" id="cn{{ $att->attendance_id }}" name="control_number" maxlength="20" value="{{ $att->control_number }}">
-                                            </div>
-                                            <div class="field">
-                                                <label for="rm{{ $att->attendance_id }}">Remarks</label>
-                                                <textarea id="rm{{ $att->attendance_id }}" name="remarks" rows="2">{{ $att->remarks }}</textarea>
-                                            </div>
-                                            <button type="submit" class="btn btn--ghost btn--sm">Save</button>
-                                        </form>
-                                    @endcan
-                                @else
-                                    @can('checkIn', [App\Models\Attendance::class, $rs])
-                                        <form class="checkin" method="POST" action="{{ route('staff.attendances.store', $rs) }}">
-                                            @csrf
-                                            <div class="field">
-                                                <label for="ncn{{ $rs->reservation_seat_id }}">Control no. <span class="hint">(from the physical ticket, optional)</span></label>
-                                                <input type="text" id="ncn{{ $rs->reservation_seat_id }}" name="control_number" maxlength="20">
-                                            </div>
-                                            <div class="field">
-                                                <label for="nrm{{ $rs->reservation_seat_id }}">Remarks</label>
-                                                <textarea id="nrm{{ $rs->reservation_seat_id }}" name="remarks" rows="2"></textarea>
-                                            </div>
-                                            <button type="submit" class="btn btn--success btn--sm">Check in {{ $rs->seat->seat_label }}</button>
-                                        </form>
-                                    @else
-                                        <span class="muted small">Not admitted</span>
-                                    @endcan
-                                @endif
-                            </td>
-                        </tr>
-                    @endforeach
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        @if ($payment)
-            <section class="card reveal">
-                <div class="card__head">
-                    <h2>Payment</h2>
-                    <x-status :value="$payment->status" />
-                </div>
-                <dl class="kv" style="margin-bottom:var(--s-5)">
-                    <dt>Amount due</dt><dd style="font-weight:700">₱{{ number_format($payment->amount, 2) }}</dd>
-                    <dt>Channel</dt><dd>{{ $payment->payment_channel ?? '—' }} <span class="muted small">(self-reported)</span></dd>
-                    <dt>Created</dt><dd>{{ $payment->created_at?->format('M j, Y H:i') }}</dd>
+            @if (! $payment)
+                <p class="muted" style="margin:0">Free screening — no payment involved.</p>
+            @else
+                <dl class="kv">
+                    <dt>Amount</dt><dd>₱{{ number_format($payment->amount, 2) }}</dd>
+                    <dt>Status</dt><dd><x-status :value="$payment->isPaid() ? 'paid' : 'unpaid'" /></dd>
+                    <dt>Method</dt><dd>{{ $payment->payment_channel ? strtoupper($payment->payment_channel) : '—' }}</dd>
+                    <dt>Paid at</dt><dd>{{ $payment->paid_at?->format('M j, Y g:i A') ?? '—' }}</dd>
+                    <dt>Checkout session</dt><dd class="small">{{ $payment->provider_session_id ?? 'Not started' }}</dd>
+                    <dt>PayMongo payment</dt><dd class="small">{{ $payment->provider_payment_id ?? '—' }}</dd>
                 </dl>
-                <h3>Proof submissions</h3>
-                @include('staff.payment-proofs._table', ['proofs' => $payment->proofs->sortByDesc('submitted_at'), 'showReservation' => false])
-            </section>
-        @endif
+                @if ($payment->proofs->isNotEmpty())
+                    <details style="margin-top:14px">
+                        <summary class="small muted" style="cursor:pointer">Earlier screenshot proofs ({{ $payment->proofs->count() }}) — from the retired QR flow</summary>
+                        <ul class="small" style="margin:8px 0 0;padding-left:18px">
+                            @foreach ($payment->proofs as $proof)
+                                <li><a href="{{ asset('storage/'.$proof->proof_image) }}" target="_blank" rel="noopener">{{ $proof->submitted_at->format('M j, Y g:i A') }}</a> · {{ $proof->status }}</li>
+                            @endforeach
+                        </ul>
+                    </details>
+                @endif
+            @endif
+        </section>
     </div>
+
+    <section class="card card--flush">
+        <div class="card__head">
+            <h2>Attendees &amp; admission</h2>
+            <a class="btn btn--ghost btn--sm" href="{{ route('staff.screenings.show', $screening) }}">Open full screening checklist</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table checklist">
+                <thead><tr><th>✓</th><th>Name</th><th>Seat</th><th>Booking</th><th>Reservation</th><th>Payment</th><th>Attendance</th><th></th></tr></thead>
+                <tbody data-checklist>
+                @foreach ($reservation->reservationSeats as $rs)
+                    @include('staff.screenings._attendee-row', ['rs' => $rs->setRelation('reservation', $reservation)->setRelation('screening', $screening)])
+                @endforeach
+                </tbody>
+            </table>
+        </div>
+        <div style="padding:14px 20px;border-top:1px solid var(--border)">
+            <details>
+                <summary class="small muted" style="cursor:pointer">Declared attendee details (age, sex, company/school, contact)</summary>
+                <div class="table-wrap" style="margin-top:10px">
+                    <table class="table">
+                        <thead><tr><th>Seat</th><th>Name</th><th>Age</th><th>Sex</th><th>Company / school</th><th>Contact</th><th>Senior card</th><th>PWD</th></tr></thead>
+                        <tbody>
+                        @foreach ($reservation->reservationSeats as $rs)
+                            @php($a = $rs->attendee)
+                            <tr>
+                                <td>{{ $rs->seat->seat_label }}</td><td>{{ $a?->full_name }}</td><td>{{ $a?->age ?? '—' }}</td><td>{{ $a?->sex ?? '—' }}</td>
+                                <td>{{ $a?->company_school ?? '—' }}</td><td>{{ trim(($a?->contact_no ?? '').' '.($a?->email ?? '')) ?: '—' }}</td>
+                                <td>{{ $a?->senior_card_no ?? '—' }}</td><td>{{ $a?->pwd_indicator ? 'Yes' : 'No' }}</td>
+                            </tr>
+                        @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        </div>
+    </section>
 @endsection

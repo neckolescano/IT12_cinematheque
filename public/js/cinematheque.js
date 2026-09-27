@@ -109,20 +109,20 @@
     if (picker) {
         var max = parseInt(picker.getAttribute('data-max'), 10) || 10;
         var price = parseFloat(picker.getAttribute('data-price') || '0');
-        var countEl = document.querySelector('[data-seat-count]');
-        var listEl = document.querySelector('[data-seat-list]');
-        var totalEl = document.querySelector('[data-seat-total]');
-        var submit = document.querySelector('[data-seat-submit]');
+        var all = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
+        var countEls = all('[data-seat-count]'), listEls = all('[data-seat-list]'), totalEls = all('[data-seat-total]'), submits = all('[data-seat-submit]');
         var boxes = Array.prototype.slice.call(picker.querySelectorAll('input[type=checkbox]'));
         var initiallyDisabled = boxes.filter(function (b) { return b.disabled; });
 
         var update = function () {
             var chosen = boxes.filter(function (b) { return b.checked; });
             var n = chosen.length;
-            if (countEl) countEl.textContent = n === 1 ? '1 seat' : n + ' seats';
-            if (listEl) listEl.textContent = n ? chosen.map(function (b) { return b.getAttribute('data-label'); }).join(', ') : 'none selected';
-            if (totalEl) totalEl.textContent = '₱' + (price * n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            if (submit) submit.disabled = n === 0;
+            var total = price > 0 ? '₱' + (price * n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Free';
+            countEls.forEach(function (el) { el.textContent = n === 1 ? '1 seat' : n + ' seats'; });
+            listEls.forEach(function (el) { el.textContent = n ? chosen.map(function (b) { return b.getAttribute('data-label'); }).join(', ') : 'None selected yet'; });
+            totalEls.forEach(function (el) { el.textContent = total; });
+            submits.forEach(function (b) { b.disabled = n === 0; });
+            all('[data-seat-hint]').forEach(function (h) { h.hidden = n > 0; });
             boxes.forEach(function (b) {
                 if (initiallyDisabled.indexOf(b) !== -1) return;
                 b.disabled = !b.checked && n >= max;

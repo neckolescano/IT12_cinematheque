@@ -15,15 +15,15 @@ class AccessControlTest extends TestCase
     {
         $screening = Screening::factory()->create();
 
-        $this->get('/')->assertOk()->assertSee($screening->event_title);
+        $this->get(route('home'))->assertOk()->assertSee($screening->event_title);
         $this->get(route('screenings.show', $screening))->assertOk();
         $this->get(route('bookings.lookup'))->assertOk();
     }
 
     public function test_guests_are_redirected_from_every_staff_route(): void
     {
-        foreach (['/staff', '/staff/screenings', '/staff/reservations', '/staff/payment-proofs',
-                  '/staff/qr-codes', '/staff/users', '/staff/reports', '/staff/movies'] as $url) {
+        foreach (['/ccdadmin', '/ccdadmin/screenings', '/ccdadmin/reservations', '/ccdadmin/users',
+                  '/ccdadmin/reports', '/ccdadmin/reports/export', '/ccdadmin/movies', '/ccdadmin/seats'] as $url) {
             $this->get($url)->assertRedirect(route('login'));
         }
     }
@@ -33,10 +33,10 @@ class AccessControlTest extends TestCase
         foreach (User::POSITIONS as $position) {
             $user = User::factory()->create(['position' => $position]);
 
-            $this->actingAs($user)->get('/staff')->assertOk();
-            $this->actingAs($user)->get('/staff/payment-proofs')->assertOk();
-            $this->actingAs($user)->get('/staff/users')->assertOk();
-            $this->actingAs($user)->get('/staff/reports')->assertOk();
+            $this->actingAs($user)->get('/ccdadmin')->assertOk();
+            $this->actingAs($user)->get('/ccdadmin/screenings')->assertOk();
+            $this->actingAs($user)->get('/ccdadmin/users')->assertOk();
+            $this->actingAs($user)->get('/ccdadmin/reports')->assertOk();
         }
     }
 
@@ -44,7 +44,7 @@ class AccessControlTest extends TestCase
     {
         User::factory()->inactive()->create(['email' => 'old@example.test']);
 
-        $this->post('/login', ['email' => 'old@example.test', 'password' => 'password'])
+        $this->post('/ccdadmin/login', ['email' => 'old@example.test', 'password' => 'password'])
             ->assertSessionHasErrors('email');
         $this->assertGuest();
     }
@@ -53,22 +53,22 @@ class AccessControlTest extends TestCase
     {
         User::factory()->create(['email' => 'staff@example.test']);
 
-        $this->post('/login', ['email' => 'staff@example.test', 'password' => 'password'])
+        $this->post('/ccdadmin/login', ['email' => 'staff@example.test', 'password' => 'password'])
             ->assertRedirect(route('staff.dashboard'));
         $this->assertAuthenticated();
 
-        $this->post('/logout')->assertRedirect(route('home'));
+        $this->post('/ccdadmin/logout')->assertRedirect(route('login'));
         $this->assertGuest();
     }
 
     public function test_staff_deactivated_mid_session_is_logged_out(): void
     {
         $user = User::factory()->create();
-        $this->actingAs($user)->get('/staff')->assertOk();
+        $this->actingAs($user)->get('/ccdadmin')->assertOk();
 
         $user->update(['is_active' => false]);
 
-        $this->actingAs($user)->get('/staff')->assertRedirect(route('login'));
+        $this->actingAs($user)->get('/ccdadmin')->assertRedirect(route('login'));
         $this->assertGuest();
     }
 
@@ -91,5 +91,27 @@ class AccessControlTest extends TestCase
         $this->get(route('screenings.show', $screening))->assertDontSee('Staff view of this screening');
         $this->actingAs(User::factory()->create())
             ->get(route('screenings.show', $screening))->assertSee('Staff view of this screening');
+    }
+
+    public function test_customer_and_admin_live_under_their_own_prefixes(): void
+    {
+        $this->get('/')->assertRedirect('/cinemathequecentredavao');
+        $this->assertSame(url('/cinemathequecentredavao'), route('home'));
+        $this->assertSame(url('/ccdadmin/login'), route('login'));
+        $this->get('/ccdadmin/login')->assertOk()->assertSee('Staff sign in');
+    }
+
+    public function test_customer_pages_do_not_advertise_the_admin_area(): void
+    {
+        Screening::factory()->create();
+
+        $this->get(route('home'))->assertOk()
+            ->assertDontSee('ccdadmin')
+            ->assertDontSee('Staff login');
+    }
+
+    public function test_logged_in_staff_opening_the_login_page_go_to_the_dashboard(): void
+    {
+        $this->actingAs(User::factory()->create())->get('/ccdadmin/login')->assertRedirect(route('staff.dashboard'));
     }
 }

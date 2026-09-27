@@ -15,7 +15,10 @@ class Payment extends Model
     /** Only created_at exists on this table. */
     public const UPDATED_AT = null;
 
-    protected $fillable = ['reservation_id', 'amount', 'payment_channel', 'status'];
+    protected $fillable = [
+        'reservation_id', 'amount', 'payment_channel', 'status',
+        'provider_session_id', 'provider_payment_id', 'paid_at',
+    ];
 
     protected $attributes = [
         'status' => 'pending',
@@ -26,6 +29,7 @@ class Payment extends Model
         return [
             'amount' => 'decimal:2',
             'created_at' => 'datetime',
+            'paid_at' => 'datetime',
         ];
     }
 
@@ -34,13 +38,14 @@ class Payment extends Model
         return $this->belongsTo(Reservation::class, 'reservation_id', 'reservation_id');
     }
 
+    /** Screenshot proofs from the retired QR flow — kept read-only as payment history. */
     public function proofs(): HasMany
     {
         return $this->hasMany(PaymentProof::class, 'payment_id', 'payment_id');
     }
 
-    public function hasPendingProof(): bool
+    public function isPaid(): bool
     {
-        return $this->proofs()->where('status', 'pending')->exists();
+        return $this->status === 'verified';
     }
 }
