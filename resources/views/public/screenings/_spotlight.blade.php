@@ -21,6 +21,9 @@
                 <div class="spotlight__copy">
                     <span class="spotlight__kicker">{{ $soon ? 'Opens '.$lead->event_date->format('M j') : 'Now showing' }}</span>
                     <h2 class="spotlight__title">{{ $film->title }}</h2>
+                    @if ($movie?->directors->isNotEmpty())
+                        <p class="spotlight__director">Directed by <strong>{{ $movie->directors->pluck('full_name')->join(', ') }}</strong></p>
+                    @endif
                     @if ($movie?->rating || $facts->isNotEmpty())
                         <p class="spotlight__facts">
                             @if ($movie?->rating)<span class="badge-rating rating--{{ $tagger::ratingGroup($movie->rating) }}">{{ $movie->rating }}</span>@endif

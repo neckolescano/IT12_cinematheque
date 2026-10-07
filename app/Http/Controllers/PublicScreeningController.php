@@ -29,7 +29,7 @@ class PublicScreeningController extends Controller
             'type' => ['nullable', Rule::in(Screening::TYPES)],
         ]);
 
-        $screenings = Screening::with('movie.genres')
+        $screenings = Screening::with('movie.genres', 'movie.directors')
             ->withCount('heldSeats')
             ->whereDate('event_date', '>=', today())
             ->when($filters['q'] ?? null, fn ($q, $term) => $q->where(fn ($w) => $w

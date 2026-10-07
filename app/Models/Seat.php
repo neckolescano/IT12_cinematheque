@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Seat extends Model
 {
-    /** The venue has exactly this many seats (rows A–L × 10). Fixed: there is no seat admin. */
+    /** The venue has exactly this many seats (rows A–J × 1–12). Fixed: there is no seat admin. */
     public const CAPACITY = 120;
 
     protected $primaryKey = 'seat_id';

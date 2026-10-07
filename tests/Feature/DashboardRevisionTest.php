@@ -39,6 +39,12 @@ class DashboardRevisionTest extends TestCase
         $this->assertSame(Seat::CAPACITY, Seat::count());
         $this->assertSame(120, Seat::CAPACITY);
 
+        // 10 rows (A–J) of 12 seats.
+        $rows = Seat::pluck('seat_label')->groupBy(fn ($label) => preg_replace('/\d+$/', '', $label))->map->count();
+        $this->assertSame(range('A', 'J'), $rows->keys()->sort()->values()->all());
+        $this->assertSame([12], $rows->unique()->values()->all());
+        $this->assertTrue(Seat::where('seat_label', 'J12')->exists());
+
         // Capacity is not entered per screening: anything sent is ignored.
         $this->actingAs($this->staff)->post(route('staff.screenings.store'), $this->screeningForm(['total_seats' => 5]))->assertSessionHasNoErrors();
         $this->assertSame(120, Screening::firstOrFail()->total_seats);

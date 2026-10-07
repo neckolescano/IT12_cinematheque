@@ -78,8 +78,10 @@ p { margin: 0 0 12px; }
 .site-header__inner { display: flex; align-items: center; gap: 16px; min-height: 64px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text); }
 .brand:hover { text-decoration: none; }
-.brand__mark { width: 34px; height: 34px; flex: none; }
-.brand__mountain { fill: var(--ink); opacity: .15; }
+/* The Cinematheque Davao serpent: a transparent mask painted in the theme gold (deep on light, bright on dark) */
+.brand__logo { --brand-mark: #b87400; display: block; width: 58px; height: 30px; flex: none; background: var(--brand-mark);
+    -webkit-mask: var(--brand-mask) center / contain no-repeat; mask: var(--brand-mask) center / contain no-repeat; }
+:root[data-theme="dark"] .brand__logo { --brand-mark: var(--gold); }
 .brand__text { display: grid; line-height: 1.05; }
 .brand__name { font-family: var(--font-display); font-weight: 600; font-size: 17px; letter-spacing: .14em; text-transform: uppercase; }
 .brand__sub { font-size: 9.5px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--gold-text); }
@@ -100,11 +102,42 @@ p { margin: 0 0 12px; }
     .nav-open .nav { display: flex; }
     .nav a[aria-current="page"]::after { left: 12px; right: auto; width: 24px; }
 }
-.site-footer { position: relative; margin-top: 24px; padding: 32px 0 0; border-top: 1px solid var(--border); color: var(--muted); overflow: hidden; }
-.site-footer__inner { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; padding-bottom: 20px; position: relative; z-index: 1; }
-.site-footer__nav { display: flex; gap: 18px; font-size: 14px; }
-.site-footer__nav a { color: var(--muted); }
-.site-footer__note { width: 100%; margin: 0; font-size: 12px; color: var(--faint); }
+/* Footer (after fdcp.ph): brand + link columns, the giant CINEMATHEQUE wordmark, then copyright + FDCP badge */
+.site-footer { margin-top: 24px; padding: 48px 0 24px; border-top: 1px solid var(--border); color: var(--muted); overflow: hidden; }
+.site-footer { container-type: inline-size; } /* the wordmark sizes to the footer width */
+.site-footer__top { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 2.4fr); gap: 32px 56px; }
+.site-footer__brand { display: grid; align-content: start; justify-items: start; gap: 14px; }
+.site-footer__brand p { max-width: 30ch; margin: 0; font-size: 14px; }
+.fdcp-badge { display: inline-flex; align-items: center; gap: 10px; padding: 6px 14px 6px 6px; border: 1px solid var(--border); border-radius: var(--r-md); color: var(--text); font-size: 12.5px; font-weight: 600; line-height: 1.25; }
+.fdcp-badge:hover { border-color: var(--gold); text-decoration: none; color: var(--text); }
+.fdcp-badge img { width: 34px; height: 38px; border-radius: 6px; object-fit: cover; }
+.fdcp-badge small { display: block; font-size: 11px; font-weight: 400; color: var(--muted); }
+.site-footer__cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 24px 32px; }
+.site-footer__cols h2 { margin: 0 0 12px; font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--gold-text); }
+.site-footer__cols ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; font-size: 15px; color: var(--text); }
+.site-footer__cols a { color: var(--text); }
+.site-footer__cols a:hover { color: var(--gold-text); text-decoration: underline; text-decoration-color: var(--gold); text-underline-offset: 4px; }
+/* The wordmark: CINEMATHEQUE across the full footer width (container units of the footer), its letters filled with
+   the Cinematheque facade photo, slowly panning. Light theme: dark ink with the photo as a subtle texture (yellow on
+   cream is too low-contrast). Dark theme: the photo toned in brand gold, with a soft glow.
+   Line height above 1 so no glyph overflows its box (clipped text only paints inside the box). */
+.footer-wordmark { margin: 36px 0 22px; padding: 0 2cqi; font: 600 15.4cqi/1.12 var(--font-display); letter-spacing: -.005em; text-transform: uppercase; text-align: center; white-space: nowrap; user-select: none; color: transparent;
+    --wm-tone: linear-gradient(100deg, #121212 0%, #2a2418 50%, #121212 100%); /* light page: near-black ink */
+    background: var(--wordmark-photo, none) 50% 30% / cover no-repeat, var(--wm-tone);
+    background-blend-mode: soft-light, normal;
+    -webkit-background-clip: text; background-clip: text;
+    animation: wordmark-pan 40s ease-in-out infinite alternate; }
+:root[data-theme="dark"] .footer-wordmark { --wm-tone: linear-gradient(100deg, #cc8500 0%, #ffcc00 28%, #ffe27a 50%, #ebbc00 72%, #cc8500 100%); filter: drop-shadow(0 12px 28px rgba(204, 133, 0, .22)); }
+@keyframes wordmark-pan { from { background-position: 50% 22%, 0 0; } to { background-position: 50% 68%, 0 0; } }
+@media (prefers-reduced-motion: reduce) { .footer-wordmark { animation: none; } }
+/* Bottom bar: copyright left, the FDCP badge right */
+.site-footer__bottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+.site-footer__note { margin: 0; font-size: 12.5px; color: var(--faint); }
+@media (max-width: 760px) {
+    .site-footer__top { grid-template-columns: 1fr; }
+    .site-footer__cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .site-footer__bottom { flex-direction: column-reverse; text-align: center; }
+}
 .skyline { display: block; width: 100%; height: 56px; color: var(--ink); opacity: .07; }
 :root[data-theme="dark"] .skyline { color: var(--gold); }
 
@@ -233,16 +266,20 @@ p { margin: 0 0 12px; }
 .booking__lead { margin: 6px 0 18px; }
 @media (max-width: 900px) { .booking { grid-template-columns: 1fr; } .booking__side { position: static; } }
 /* Summary card: a black banner with the poster large on a yellow offset block, then seats, total and the step's button */
-.summary { overflow: hidden; background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--shadow); }
-.summary__banner { display: flex; align-items: flex-end; gap: 18px; padding: 22px 20px 20px; background: #121212; color: #fff; }
+.summary {
+    --sb-bg: var(--stub); --sb-fg: var(--text); --sb-kicker: var(--gold-text); --sb-muted: var(--muted); --sb-shadow: rgba(18, 18, 18, .3);
+    overflow: hidden; background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--shadow);
+}
+:root[data-theme="dark"] .summary { --sb-bg: #121212; --sb-fg: #fff; --sb-kicker: var(--gold-300); --sb-muted: rgba(255, 255, 255, .6); --sb-shadow: rgba(0, 0, 0, .9); }
+.summary__banner { display: flex; align-items: flex-end; gap: 18px; padding: 22px 20px 20px; border-bottom: 2px dashed var(--perforation); background: var(--sb-bg); color: var(--sb-fg); }
 .summary__poster { position: relative; flex: none; width: 128px; margin: 0 10px 10px 0; }
 .summary__poster::before { content: ""; position: absolute; inset: 10px -10px -10px 10px; border-radius: var(--r-md); background: var(--gold); }
-.summary__poster .poster { border-radius: var(--r-md); box-shadow: 0 16px 30px -14px rgba(0, 0, 0, .9); }
+.summary__poster .poster { border-radius: var(--r-md); box-shadow: 0 16px 30px -14px var(--sb-shadow); }
 .summary__film { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-bottom: 10px; }
-.summary__kicker { font-size: 10.5px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--gold-300); }
+.summary__kicker { font-size: 10.5px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; color: var(--sb-kicker); }
 .summary__title { font-family: var(--font-display); font-weight: 600; font-size: 22px; line-height: 1.05; text-transform: uppercase; letter-spacing: .02em; overflow-wrap: anywhere; }
 .summary__when { font-size: 13.5px; font-weight: 600; }
-.summary__venue { font-size: 12px; color: rgba(255, 255, 255, .6); }
+.summary__venue { font-size: 12px; color: var(--sb-muted); }
 .summary__body { padding: 16px 20px 4px; }
 .summary__rows { display: grid; gap: 6px; margin: 0 0 12px; font-size: 13.5px; }
 .summary__rows div { display: flex; justify-content: space-between; gap: 12px; }
@@ -252,19 +289,19 @@ p { margin: 0 0 12px; }
 .summary__total strong { font-size: 22px; color: var(--text); }
 .summary__actions { display: grid; gap: 10px; padding: 16px 20px 20px; }
 
-/* Seat map: 12 rows × 10 seats, sized to fit without scrolling on a laptop */
+/* Seat map: 10 rows × 12 seats, sized to fit without scrolling on a laptop */
 .seat-map { padding: 18px 20px 16px; background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--shadow); }
 .seat-map__head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
 .screen-bar { margin: 0 auto 14px; width: 78%; padding-top: 6px; border-top: 4px solid var(--gold); border-radius: 50% 50% 0 0 / 14px 14px 0 0; text-align: center; font-size: 10.5px; font-weight: 600; letter-spacing: .4em; text-transform: uppercase; color: var(--faint); }
-.seat-grid { display: grid; gap: 5px; justify-content: center; }
-.seat-row { display: grid; grid-template-columns: 18px repeat(10, 30px) 18px; gap: 5px; align-items: center; }
+.seat-grid { display: grid; grid-template-columns: minmax(0, max-content); gap: 5px; justify-content: center; }
+.seat-row { display: grid; grid-template-columns: 40px 18px repeat(12, minmax(0, 30px)) 18px 40px; gap: 5px; align-items: center; } /* exit columns at both ends; seats shrink to fit narrow screens */
 .seat-row__label { font-size: 11px; font-weight: 700; color: var(--faint); text-align: center; }
 .seat { position: relative; cursor: pointer; }
 .seat input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
 .seat > span { display: grid; place-items: center; height: 26px; border: 1.5px solid var(--seat-bd); border-radius: 7px 7px 4px 4px; background: var(--seat); font-size: 10.5px; font-weight: 600; color: var(--muted); transition: background-color .12s, border-color .12s; }
 .seat:hover > span { border-color: var(--gold-600); }
 .seat input:checked + span { background: var(--gold); border-color: var(--gold-600); color: #141219; }
-.seat input:disabled + span { background: var(--seat-taken); border-color: transparent; color: transparent; cursor: not-allowed; }
+.seat input:disabled + span { background: var(--seat-taken); border-color: transparent; color: var(--faint); text-decoration: line-through; opacity: .75; cursor: not-allowed; } /* booked: number kept (struck), so all 120 seats always show */
 .seat input:disabled:not(:checked) { cursor: not-allowed; }
 .seat input:focus-visible + span { outline: 2px solid var(--gold-600); outline-offset: 1px; }
 .seat-legend { display: flex; justify-content: center; gap: 18px; margin-top: 14px; font-size: 12px; color: var(--muted); }
@@ -272,7 +309,30 @@ p { margin: 0 0 12px; }
 .seat-legend i { width: 14px; height: 12px; border: 1.5px solid var(--seat-bd); border-radius: 4px 4px 2px 2px; background: var(--seat); }
 .seat-legend i.is-selected { background: var(--gold); border-color: var(--gold-600); }
 .seat-legend i.is-taken { background: var(--seat-taken); border-color: transparent; }
-@media (max-width: 520px) { .seat-row { grid-template-columns: 14px repeat(10, minmax(0, 1fr)) 14px; gap: 3px; } .seat-map { padding: 14px 10px; } }
+/* The hall around the seats, as markers only (no walls): screen, the seat block, a red exit sign on each
+   side in line with row B (the side columns of every row, so it stays aligned at any width), and the entrance. */
+.hall { max-width: 640px; margin: 0 auto; }
+.hall .screen-bar { width: 86%; margin-bottom: 24px; }
+.seat-row__side { display: grid; place-items: center; }
+.exit-sign { display: inline-grid; place-items: center; padding: 4px 6px; border-radius: 4px; background: var(--exit); color: #fff; font: 700 9px/1 var(--font); letter-spacing: .12em; text-transform: uppercase; box-shadow: 0 0 0 3px color-mix(in srgb, var(--exit) 18%, transparent); }
+.hall__entrance { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 22px; color: var(--faint); }
+.hall__entrance .icon-arrow { width: 18px; height: 18px; }
+.entrance-mark { display: inline-flex; align-items: center; gap: 7px; padding: 6px 14px; border: 1.5px solid var(--border-strong); border-radius: var(--r-pill); background: var(--surface); color: var(--text); font-size: 10.5px; font-weight: 600; letter-spacing: .2em; text-transform: uppercase; }
+.entrance-mark svg { width: 15px; height: 15px; flex: none; }
+.seat-legend { flex-wrap: wrap; row-gap: 8px; }
+:root { --exit: #d92d20; }
+:root[data-theme="dark"] { --exit: #f04438; }
+@media (max-width: 520px) {
+    .exit-sign { padding: 5px 3px; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 8px; letter-spacing: .08em; }
+}
+/* Phones: row letters on the left only, seats at least 20px wide; only screens narrower than a standard phone
+   scroll the plan sideways */
+@media (max-width: 520px) {
+    .seat-row { grid-template-columns: 12px 12px repeat(12, minmax(20px, 1fr)) 12px; gap: 2px; }
+    .seat-row__label ~ .seat-row__label { display: none; }
+    .seat-map { padding: 14px 10px; }
+    .hall { overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 4px; }
+}
 
 /* "Who's coming?" — one compact card per seat */
 .person { margin: 0 0 14px; padding: 14px 18px 6px; border: 0; background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--shadow); }
@@ -482,7 +542,7 @@ p { margin: 0 0 12px; }
 .centres strong .eyebrow { display: inline; margin-left: 8px; font-family: var(--font); font-size: 10.5px; }
 .centres .muted { font-size: 15.5px; }
 .chapter--closing { padding-bottom: 32px; }
-.chapter--closing .brand__mark { width: 48px; height: 48px; }
+.chapter--closing .brand__logo { width: 80px; height: 40px; }
 .chapter--closing .btn { margin: 12px 0 36px; }
 .sources { padding-top: 18px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--faint); }
 @media (max-width: 640px) {
@@ -632,6 +692,8 @@ dialog.modal::backdrop { background: rgba(20, 18, 25, .5); }
 .spotlight__kicker { display: inline-flex; align-items: center; gap: 10px; font-size: 11px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: var(--sp-accent); }
 .spotlight__kicker::before { content: ""; width: 26px; height: 2px; background: currentColor; }
 .spotlight__title { font-family: var(--font-display); font-weight: 600; font-size: clamp(32px, 4.6vw, 58px); line-height: 1; text-transform: uppercase; letter-spacing: .005em; }
+.spotlight__director { margin: -2px 0 0; font-size: 14.5px; color: var(--sp-muted); }
+.spotlight__director strong { font-weight: 600; color: var(--sp-text); }
 .spotlight__facts { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0; font-size: 13.5px; color: var(--sp-muted); }
 .spotlight__tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .spotlight__tags .sc-tag { border-color: #e9c766; background: #fff7e1; color: #8a5a00; }
@@ -792,17 +854,28 @@ dialog.modal::backdrop { background: rgba(20, 18, 25, .5); }
 .board__day:first-child { border-top: 0; }
 .board__stub { display: grid; place-items: center; padding: 8px 4px; border-radius: var(--r-md); background: var(--stub); }
 .board__shows { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.showrow { display: grid; grid-template-columns: minmax(0, 1fr) 70px 170px auto; align-items: center; gap: 16px; padding: 12px 12px 12px 18px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg); transition: border-color .15s; }
-.showrow:hover { border-color: var(--border-strong); }
-.showrow.is-chosen { border-color: var(--gold); background: var(--gold-tint); box-shadow: inset 3px 0 0 var(--gold-600); }
-.showrow__when { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
-.showrow__time { font-family: var(--font-display); font-weight: 600; font-size: 22px; letter-spacing: .02em; }
-.showrow__end { font-size: 12.5px; color: var(--muted); }
-.showrow__price { font-size: 14px; font-weight: 600; }
-.showrow__seats { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; line-height: 1.3; }
-.showrow__seats::before { content: ""; grid-row: span 2; width: 10px; height: 10px; border-radius: 50%; background: var(--dot); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dot) 22%, transparent); }
-.showrow__level { font-size: 13px; font-weight: 600; }
-.showrow .btn { min-width: 128px; }
+/* Showtime as a ticket: the time on a cream stub | a dashed tear line with half-circle notches cut from the top and
+   bottom edges (a CSS mask at --stub-w) | admission, seats and the button. The chosen showtime's stub is yellow. */
+.showrow { --stub-w: 150px; --notch: 10px; display: grid; grid-template-columns: var(--stub-w) minmax(0, 1fr); border: 1px solid var(--border-strong); border-radius: var(--r-md); background: var(--surface); transition: border-color .15s;
+    -webkit-mask: radial-gradient(circle var(--notch) at var(--stub-w) 0, #0000 98%, #000) top / 100% 51% no-repeat, radial-gradient(circle var(--notch) at var(--stub-w) 100%, #0000 98%, #000) bottom / 100% 51% no-repeat;
+    mask: radial-gradient(circle var(--notch) at var(--stub-w) 0, #0000 98%, #000) top / 100% 51% no-repeat, radial-gradient(circle var(--notch) at var(--stub-w) 100%, #0000 98%, #000) bottom / 100% 51% no-repeat; }
+.showrow:hover { border-color: var(--gold); }
+.showrow__stub { display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 14px 18px; border-radius: var(--r-md) 0 0 var(--r-md); background: var(--stub); }
+.showrow__time { font-family: var(--font-display); font-weight: 600; font-size: 24px; line-height: 1.05; letter-spacing: .02em; }
+.showrow__end { font-size: 12px; color: var(--muted); }
+.showrow.is-chosen { border-color: var(--gold); }
+.showrow.is-chosen .showrow__stub { background: var(--gold-grad); color: #121212; }
+.showrow.is-chosen .showrow__end { color: rgba(18, 18, 18, .7); }
+.showrow__body { display: flex; align-items: center; gap: 14px 24px; min-width: 0; padding: 14px 18px 14px 24px; border-left: 2px dashed var(--perforation); }
+.showrow__info { flex: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 32px; min-width: 0; }
+.showrow__cell { display: grid; gap: 2px; }
+.showrow__label { font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+.showrow__price { font-size: 15px; font-weight: 700; }
+.showrow__level { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; }
+.showrow__level::before { content: ""; width: 9px; height: 9px; flex: none; border-radius: 50%; background: var(--dot); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dot) 22%, transparent); }
+.showrow__level .muted { font-weight: 400; }
+.showrow__notes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex-basis: 100%; }
+.showrow .btn { flex: none; min-width: 138px; }
 
 /* Seat-dot colours, and the legend on the showtimes card */
 .seat-dot--plenty { --dot: var(--sc-dot-plenty); }
@@ -813,10 +886,6 @@ dialog.modal::backdrop { background: rgba(20, 18, 25, .5); }
 
 @media (max-width: 860px) {
     .filmpage__hero { grid-template-columns: 220px minmax(0, 1fr); gap: 36px; }
-    .showrow { grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; }
-    .showrow__price { justify-self: end; }
-    .showrow__seats { grid-column: 1; }
-    .showrow .btn { grid-column: 2; }
 }
 @media (max-width: 640px) {
     .filmpage__hero { grid-template-columns: minmax(0, 1fr); gap: 28px; margin-bottom: 36px; }
@@ -825,8 +894,11 @@ dialog.modal::backdrop { background: rgba(20, 18, 25, .5); }
     .board { padding: 18px 14px; }
     .board__day { grid-template-columns: 1fr; gap: 10px; }
     .board__stub { justify-self: start; padding: 6px 14px; }
-    .showrow { padding: 12px 12px 12px 14px; }
-    .showrow .btn { min-width: 0; }
+    .showrow { --stub-w: 100px; }
+    .showrow__stub { padding: 12px 12px; }
+    .showrow__time { font-size: 20px; }
+    .showrow__body { flex-direction: column; align-items: stretch; padding: 12px 14px 14px 16px; }
+    .showrow__info { gap: 8px 20px; }
 }
 
 /* Trailer modal: 16:9 player on black */

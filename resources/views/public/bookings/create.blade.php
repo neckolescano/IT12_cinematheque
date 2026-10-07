@@ -5,8 +5,8 @@
 @php
     $max = \App\Http\Requests\StoreReservationRequest::MAX_SEATS_PER_RESERVATION;
     $step = $selected->isEmpty() ? 1 : 2;
-    // All 120 seats as rows A–L, in seat order.
-    // Sorted by label (row letter, then number), not by id: rows K–L were added after A–J.
+    // All 120 seats as rows A–J of 12, in seat order.
+    // Sorted by label (row letter, then number), not by id: seats 11–12 of each row were added later (once rows K–L).
     $rows = $seats->sortBy(fn ($seat) => preg_match('/^([A-Za-z]+)(\d+)/', $seat->seat_label, $m) ? sprintf('%s%04d', strtoupper($m[1]), $m[2]) : $seat->seat_label)
         ->groupBy(fn ($seat) => preg_match('/^([A-Za-z]+)/', $seat->seat_label, $m) ? strtoupper($m[1]) : '·');
     $crumbs = ['Screenings' => route('home'), $screening->event_title => route('screenings.show', $screening)];
@@ -25,24 +25,38 @@
                     <h1 id="seats-title" class="booking__title">Select your seats</h1>
                     <span class="muted small">{{ $available }} of {{ $screening->total_seats }} left</span>
                 </div>
-                <div class="screen-bar" aria-hidden="true">Screen</div>
-                <div class="seat-grid">
-                    @foreach ($rows as $row => $rowSeats)
-                        <div class="seat-row">
-                            <span class="seat-row__label" aria-hidden="true">{{ $row }}</span>
-                            @foreach ($rowSeats as $seat)
-                                @php($taken = in_array($seat->seat_id, $takenSeatIds, true))
-                                <label class="seat" title="Seat {{ $seat->seat_label }}{{ $taken ? ' (taken)' : '' }}">
-                                    <input type="checkbox" name="seats[]" value="{{ $seat->seat_id }}" data-label="{{ $seat->seat_label }}" @disabled($taken)>
-                                    <span>{{ preg_replace('/^[A-Za-z]+/', '', $seat->seat_label) }}<span class="sr-only"> seat {{ $seat->seat_label }}{{ $taken ? ', taken' : '' }}</span></span>
-                                </label>
-                            @endforeach
-                            <span class="seat-row__label" aria-hidden="true">{{ $row }}</span>
-                        </div>
-                    @endforeach
+                {{-- The hall, as markers only (no walls): the screen, the 10 × 12 seat block (120 seats), an exit on each side
+                     in line with row B, and the entrance at the back, where you walk left or right to the aisles.
+                     Everything but the seats is for orientation only (aria-hidden). --}}
+                <div class="hall">
+                    <div class="screen-bar" aria-hidden="true">Screen</div>
+                    <div class="seat-grid">
+                        @foreach ($rows as $row => $rowSeats)
+                            <div class="seat-row">
+                                <span class="seat-row__side" aria-hidden="true">@if ($loop->index === 1)<span class="exit-sign">Exit</span>@endif</span>
+                                <span class="seat-row__label" aria-hidden="true">{{ $row }}</span>
+                                @foreach ($rowSeats as $seat)
+                                    @php($taken = in_array($seat->seat_id, $takenSeatIds, true))
+                                    <label class="seat" title="Seat {{ $seat->seat_label }}{{ $taken ? ' (taken)' : '' }}">
+                                        <input type="checkbox" name="seats[]" value="{{ $seat->seat_id }}" data-label="{{ $seat->seat_label }}" @disabled($taken)>
+                                        <span>{{ preg_replace('/^[A-Za-z]+/', '', $seat->seat_label) }}<span class="sr-only"> seat {{ $seat->seat_label }}{{ $taken ? ', taken' : '' }}</span></span>
+                                    </label>
+                                @endforeach
+                                <span class="seat-row__label" aria-hidden="true">{{ $row }}</span>
+                                <span class="seat-row__side" aria-hidden="true">@if ($loop->index === 1)<span class="exit-sign">Exit</span>@endif</span>
+                            </div>
+                        @endforeach
+                    </div>
+                    <div class="hall__entrance" aria-hidden="true">
+                        <x-arrow dir="left" />
+                        <span class="entrance-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21h16M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17"/><circle cx="14.5" cy="12" r="1" fill="currentColor"/></svg>Entrance</span>
+                        <x-arrow />
+                    </div>
                 </div>
                 <div class="seat-legend" aria-hidden="true">
-                    <span><i></i>Available</span><span><i class="is-selected"></i>Selected</span><span><i class="is-taken"></i>Taken</span>
+                    <span><i></i>Available</span>
+                    <span><i class="is-selected"></i>Selected</span>
+                    <span><i class="is-taken"></i>Taken</span>
                 </div>
             </section>
 

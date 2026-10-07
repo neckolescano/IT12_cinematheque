@@ -137,7 +137,7 @@ class Version5Test extends TestCase
         $page = $this->get(route('screenings.show', $second))->assertOk()->getContent();
         $this->assertSame(1, substr_count($page, route('bookings.create', $first).'"'));
         $this->assertSame(1, substr_count($page, route('bookings.create', $second).'"'));
-        $this->assertSame(2, substr_count($page, '>Choose seats<'));
+        $this->assertSame(2, substr_count($page, '>Reserve seats<')); // free screenings; paid ones say "Get tickets"
         $this->assertSame(1, substr_count($page, 'aria-current="true"'));
         $this->assertStringContainsString('class="showrow is-chosen"', $page);
         $this->assertStringNotContainsString('Your screening', $page);

@@ -4,7 +4,7 @@
 
 {{-- Film page: a centred hero (poster on a yellow offset block | the film: title, tags, curator's quote, story,
      "at a glance" fact sheet, cast), then the showtimes card, where every showtime is a row with its own
-     seat indicator and "Choose seats" button. Phone: one column. --}}
+     seat indicator and its own "Reserve seats" / "Get tickets" button. Phone: one column. --}}
 @php
     $tagger = \App\Support\ShowcaseTags::class;
     $movie = $screening->movie;
@@ -93,7 +93,7 @@
             </article>
         </div>
 
-        {{-- Showtimes: one group per date; each showtime is a row with seats and its own Choose seats. --}}
+        {{-- Showtimes: one group per date; each showtime is a ticket with its seats and its own button. --}}
         <section class="board" id="showtimes" aria-labelledby="showtimes-title">
             <div class="board__head">
                 <h2 class="section-title" id="showtimes-title">Showtimes</h2>
@@ -114,25 +114,38 @@
                                     $left = $tagger::seatsLeft($show);
                                     $ended = $show->event_date->lt(today());
                                 @endphp
+                                {{-- A ticket: the time on a stub, a perforated tear line (notched edges), then admission,
+                                     seats and the action — "Reserve seats" (free, staff-approved) or "Get tickets" (paid). --}}
                                 <li @class(['showrow', 'is-chosen' => $show->is($screening)]) @if ($show->is($screening)) aria-current="true" @endif>
-                                    <div class="showrow__when">
+                                    <div class="showrow__stub">
                                         <strong class="showrow__time">{{ \Carbon\Carbon::parse($show->start_time)->format('g:i A') }}</strong>
                                         <span class="showrow__end">to {{ \Carbon\Carbon::parse($show->end_time)->format('g:i A') }}</span>
-                                        @if ($show->event_title !== $screening->event_title)<span class="small muted">{{ $show->event_title }}</span>@endif
-                                        @foreach ($tagger::forTitle($show->event_title) as $note)<span class="sc-tag">{{ $note }}</span>@endforeach
                                     </div>
-                                    <span class="showrow__price">@if ($show->isPaid())<span class="money">₱{{ number_format($show->price, 0) }}</span>@else Free @endif</span>
-                                    <span class="showrow__seats seat-dot--{{ $level }}">
-                                        <span class="showrow__level">{{ $levels[$level] }}</span>
-                                        <span class="small muted">{{ $left }} of {{ $show->total_seats }} left</span>
-                                    </span>
-                                    @if ($ended)
-                                        <span class="btn btn--sm is-disabled">Ended</span>
-                                    @elseif ($left > 0)
-                                        <a class="btn btn--gold btn--sm" href="{{ route('bookings.create', $show) }}">Choose seats<span class="sr-only"> for {{ \Carbon\Carbon::parse($show->start_time)->format('g:i A') }}, {{ $show->event_date->format('F j') }}</span></a>
-                                    @else
-                                        <span class="btn btn--sm is-disabled">Fully booked</span>
-                                    @endif
+                                    <div class="showrow__body">
+                                        <div class="showrow__info">
+                                            <span class="showrow__cell">
+                                                <span class="showrow__label">Admission</span>
+                                                <span class="showrow__price">@if ($show->isPaid())<span class="money">₱{{ number_format($show->price, 0) }}</span>@else Free @endif</span>
+                                            </span>
+                                            <span class="showrow__cell showrow__seats seat-dot--{{ $level }}">
+                                                <span class="showrow__label">Seats</span>
+                                                <span class="showrow__level">{{ $levels[$level] }} <span class="muted">· {{ $left }} of {{ $show->total_seats }} left</span></span>
+                                            </span>
+                                            @if ($show->event_title !== $screening->event_title || $tagger::forTitle($show->event_title))
+                                                <span class="showrow__notes">
+                                                    @if ($show->event_title !== $screening->event_title)<span class="small muted">{{ $show->event_title }}</span>@endif
+                                                    @foreach ($tagger::forTitle($show->event_title) as $note)<span class="sc-tag">{{ $note }}</span>@endforeach
+                                                </span>
+                                            @endif
+                                        </div>
+                                        @if ($ended)
+                                            <span class="btn btn--sm is-disabled">Ended</span>
+                                        @elseif ($left > 0)
+                                            <a class="btn btn--gold btn--sm" href="{{ route('bookings.create', $show) }}">{{ $show->isPaid() ? 'Get tickets' : 'Reserve seats' }}<span class="sr-only"> for {{ \Carbon\Carbon::parse($show->start_time)->format('g:i A') }}, {{ $show->event_date->format('F j') }}</span></a>
+                                        @else
+                                            <span class="btn btn--sm is-disabled">Fully booked</span>
+                                        @endif
+                                    </div>
                                 </li>
                             @endforeach
                         </ul>
