@@ -10,7 +10,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             StaffUserSeeder::class, // required: default staff accounts ("RBAC")
-            SeatSeeder::class,      // required: the venue's 100 physical seats
+            SeatSeeder::class,      // required: the venue's 120 physical seats (rows A–J × 1–12)
             CatalogSeeder::class,   // demo: genres, movies, cast, directors
             DemoScreeningSeeder::class, // demo: screenings, reservations, payments, attendance
         ]);
