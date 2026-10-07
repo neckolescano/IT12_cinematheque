@@ -10,7 +10,7 @@
     <p style="margin:0 0 16px;">Hi {{ $reservation->lead_first_name }},</p>
 
     @if ($payment)
-        <p style="margin:0 0 20px;">We've received your reservation. Your seats are held, but <strong>your booking is only confirmed once payment is completed</strong>. Pay securely through PayMongo using the button below. We'll email your e-ticket as soon as the payment goes through.</p>
+        <p style="margin:0 0 20px;">We've received your reservation. Your seats are held until <strong>{{ $reservation->paymentDeadline()->format('g:i A') }}</strong>, but <strong>your booking is only confirmed once payment is completed</strong>; unpaid bookings expire after {{ \App\Models\Reservation::PAYMENT_WINDOW_MINUTES }} minutes. Pay securely through PayMongo using the button below. We'll email your e-ticket as soon as the payment goes through.</p>
         <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
             <tr><td style="border-radius:24px;background:#ebbc00;">
                 <a href="{{ route('bookings.pay', $reservation) }}" style="display:inline-block;padding:12px 26px;color:#141219;font-weight:bold;text-decoration:none;font-size:15px;">Complete payment · ₱{{ number_format($payment->amount, 2) }}</a>

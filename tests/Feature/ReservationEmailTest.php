@@ -35,7 +35,7 @@ class ReservationEmailTest extends TestCase
             'seat_ids' => [$seat->seat_id],
             'lead_first_name' => 'Ana', 'lead_last_name' => 'Santos', 'lead_contact_no' => '09171234567',
             'lead_email' => 'ana@example.test', 'lead_seat_id' => $seat->seat_id,
-            'attendees' => [$seat->seat_id => ['first_name' => 'Ana', 'last_name' => 'Santos']],
+            'attendees' => [$seat->seat_id => ['first_name' => 'Ana', 'last_name' => 'Santos', 'age' => 30, 'sex' => 'F', 'company_school' => 'Ateneo de Davao', 'contact_no' => '0917 123 4567', 'email' => 'guest@example.test']],
         ]);
     }
 

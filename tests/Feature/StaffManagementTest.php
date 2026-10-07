@@ -30,7 +30,7 @@ class StaffManagementTest extends TestCase
     {
         $this->actingAs($this->staff)->post(route('staff.screenings.store'), [
             'event_title' => 'Opening Night', 'event_date' => today()->addDay()->toDateString(),
-            'start_time' => '18:00', 'end_time' => '20:00', 'type' => 'paid', 'price' => '200', 'total_seats' => 80,
+            'start_time' => '18:00', 'end_time' => '20:00', 'type' => 'paid', 'price' => '200',
         ])->assertRedirect();
 
         $screening = Screening::firstOrFail();
@@ -41,8 +41,8 @@ class StaffManagementTest extends TestCase
     public function test_screening_validation(): void
     {
         $this->actingAs($this->staff)->post(route('staff.screenings.store'), [
-            'event_title' => '', 'event_date' => 'x', 'start_time' => '20:00', 'end_time' => '18:00', 'type' => 'paid', 'total_seats' => 0,
-        ])->assertSessionHasErrors(['event_title', 'event_date', 'end_time', 'price', 'total_seats']);
+            'event_title' => '', 'event_date' => 'x', 'start_time' => '20:00', 'end_time' => '18:00', 'type' => 'paid',
+        ])->assertSessionHasErrors(['event_title', 'event_date', 'end_time', 'price']);
     }
 
     public function test_screening_with_reservations_cannot_be_deleted(): void
@@ -54,19 +54,21 @@ class StaffManagementTest extends TestCase
         $this->assertModelExists($screening);
     }
 
-    public function test_movie_catalog_syncs_pivots(): void
+    public function test_movie_form_takes_typed_credits_and_fixed_genres(): void
     {
-        $actors = Actor::factory()->count(2)->create();
-        $genre = Genre::factory()->create();
-
         $this->actingAs($this->staff)->post(route('staff.movies.store'), [
             'title' => 'Himala', 'release_year' => 1982,
-            'actor_ids' => $actors->pluck('actor_id')->all(), 'genre_ids' => [$genre->genre_id],
+            'directors' => 'Ishmael Bernal', 'actors' => 'Nora Aunor, Veronica Palileo',
+            'genres' => ['Drama'],
         ])->assertRedirect();
 
-        $movie = Movie::with('actors', 'genres')->firstOrFail();
-        $this->assertCount(2, $movie->actors);
-        $this->assertCount(1, $movie->genres);
+        $movie = Movie::with('actors', 'genres', 'directors')->firstOrFail();
+        $this->assertSame('Ishmael Bernal', $movie->directorNames());
+        $this->assertSame('Nora Aunor, Veronica Palileo', $movie->castNames());
+        $this->assertSame(['Drama'], $movie->genres->pluck('genre_name')->all());
+
+        $this->actingAs($this->staff)->post(route('staff.movies.store'), ['title' => 'X', 'genres' => ['Not A Genre']])
+            ->assertSessionHasErrors('genres.0');
     }
 
     public function test_admission_is_recorded_once_without_a_control_number(): void
@@ -91,10 +93,12 @@ class StaffManagementTest extends TestCase
         $reservation = Reservation::factory()->withSeats(1)->create();
         $seat = $reservation->reservationSeats()->first();
 
-        $this->actingAs($this->staff)->postJson(route('staff.attendances.store', $seat))
+        $response = $this->actingAs($this->staff)->postJson(route('staff.attendances.store', $seat))
             ->assertOk()->assertJsonPath('admitted', 1)
-            ->assertJsonPath('message', 'Seat '.$seat->seat->seat_label.' admitted.')
-            ->assertSee('Undo', false);
+            ->assertJsonPath('message', 'Seat '.$seat->seat->seat_label.' admitted.');
+        // The reservation's row comes back re-rendered as admitted, with Undo.
+        $this->assertStringContainsString('data-state="admitted"', $response->json('party'));
+        $this->assertStringContainsString('Undo', $response->json('party'));
 
         $attendance = Attendance::firstOrFail();
         $this->actingAs($this->staff)->deleteJson(route('staff.attendances.destroy', $attendance))
@@ -175,6 +179,7 @@ class StaffManagementTest extends TestCase
 
     public function test_staff_pages_render(): void
     {
+        \Illuminate\Support\Facades\Storage::fake('public'); // CatalogSeeder copies poster files
         $this->seed(\Database\Seeders\StaffUserSeeder::class);
         $this->seed(\Database\Seeders\CatalogSeeder::class);
         $this->seed(\Database\Seeders\DemoScreeningSeeder::class);
@@ -188,8 +193,7 @@ class StaffManagementTest extends TestCase
             route('staff.screenings.show', $screening), route('staff.screenings.edit', $screening),
             route('staff.reservations.index'), route('staff.reservations.show', $reservation),
             route('staff.movies.index'), route('staff.movies.create'), route('staff.movies.edit', $movie),
-            route('staff.actors.index'), route('staff.directors.index'), route('staff.genres.index'),
-            route('staff.seats.index'), route('staff.users.index'), route('staff.users.create'),
+            route('staff.users.index'), route('staff.users.create'),
             route('staff.reports.index'), route('bookings.show', $reservation), route('home'),
         ] as $url) {
             $this->actingAs($this->staff)->get($url)->assertOk();

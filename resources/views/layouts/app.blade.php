@@ -16,9 +16,9 @@
         </button>
 
         <nav class="nav" id="site-nav" aria-label="Main">
-            <a href="{{ route('home') }}" @if (request()->routeIs('home', 'screenings.*', 'bookings.create')) aria-current="page" @endif>Screenings</a>
-            <a href="{{ route('bookings.lookup') }}" @if (request()->routeIs('bookings.lookup', 'bookings.show')) aria-current="page" @endif>Find my booking</a>
-            {{-- No staff/admin link: the admin area is not advertised to customers. --}}
+            <a href="{{ route('home') }}" @if (request()->routeIs('home', 'screenings.*', 'bookings.create', 'bookings.show')) aria-current="page" @endif>Screenings</a>
+            <a href="{{ route('bookings.lookup') }}" @if (request()->routeIs('bookings.lookup', 'bookings.ticket')) aria-current="page" @endif>Find my booking</a>
+            <a href="{{ route('about') }}" @if (request()->routeIs('about')) aria-current="page" @endif>About</a>
             @include('partials.theme-toggle')
         </nav>
     </div>
@@ -26,7 +26,7 @@
 
 @yield('hero')
 
-<main id="main" class="@yield('main_class', 'section')">
+<main id="main" class="@yield('main_class', 'page')">
     <div class="container">
         @include('partials.flash')
         @yield('content')
@@ -34,34 +34,16 @@
 </main>
 
 <footer class="site-footer">
-    @include('partials.skyline')
-    <div class="container">
-        <div class="site-footer__grid">
-            <div>
-                @include('partials.brand')
-                <p class="small" style="margin-top:var(--s-4);max-width:36ch">A home for Philippine cinema in Davao City — screenings, retrospectives, talks and the local film community.</p>
-            </div>
-            <div>
-                <h4>Moviegoers</h4>
-                <ul>
-                    <li><a href="{{ route('home') }}">Upcoming screenings</a></li>
-                    <li><a href="{{ route('bookings.lookup') }}">Find my booking</a></li>
-                </ul>
-            </div>
-            <div>
-                <h4>How it works</h4>
-                <ul>
-                    <li>Reserve seats online — no account needed</li>
-                    <li>Paid screenings: pay through PayMongo</li>
-                    <li>Your e-ticket arrives by email</li>
-                </ul>
-            </div>
-        </div>
-        <div class="site-footer__base">
-            <span>&copy; {{ date('Y') }} Cinematheque Centre Davao · Davao City</span>
-            <span>An FDCP Cinematheque Centre</span>
-        </div>
+    <div class="container site-footer__inner">
+        @include('partials.brand')
+        <nav class="site-footer__nav" aria-label="Footer">
+            <a href="{{ route('home') }}">Screenings</a>
+            <a href="{{ route('bookings.lookup') }}">Find my booking</a>
+            <a href="{{ route('about') }}">About</a>
+        </nav>
+        <p class="site-footer__note">An FDCP Cinematheque Centre · Palma Gil St., Davao City · &copy; {{ date('Y') }}</p>
     </div>
+    @include('partials.skyline')
 </footer>
 
 @include('partials.confirm-modal')

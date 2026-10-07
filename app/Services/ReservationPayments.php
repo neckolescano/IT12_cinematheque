@@ -6,6 +6,7 @@ use App\Models\Payment;
 use App\Models\Reservation;
 use App\Services\PayMongo\PayMongoClient;
 use App\Services\PayMongo\PayMongoException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -157,7 +158,7 @@ class ReservationPayments
                 'status' => 'verified',
                 'provider_session_id' => $session['id'],
                 'provider_payment_id' => $paid['id'] ?? null,
-                'paid_at' => $paidAt ? Carbon::createFromTimestamp($paidAt) : now(),
+                'paid_at' => $paidAt ? Carbon::createFromTimestamp($paidAt, config('app.timezone')) : now(),
                 'payment_channel' => data_get($paid, 'attributes.source.type') ?? $payment->payment_channel,
             ]);
 
@@ -168,9 +169,19 @@ class ReservationPayments
                 return true;
             }
 
-            // Paid after staff cancelled: keep it cancelled and flag it for a refund.
-            Log::warning('PayMongo payment received for a reservation that is not pending', [
+            // Paid within the window, but the booking expired before PayMongo's notice was
+            // processed: it's not a late payment, so take the seats back if nobody else has.
+            if ($reservation->wasExpired() && $payment->paid_at->lte($reservation->paymentDeadline()) && $this->reclaimSeats($reservation)) {
+                $reservation->update(['status' => 'confirmed', 'cancellation_reason' => null, 'cancelled_at' => null]);
+
+                return true;
+            }
+
+            // Paid after staff cancelled it or after the payment window: the booking stays
+            // cancelled; staff see "refund due" on the reservation page.
+            Log::warning('PayMongo payment received for a reservation that is not pending; refund due', [
                 'booking' => $reservation->booking_reference, 'status' => $reservation->status,
+                'reason' => $reservation->cancellation_reason,
             ]);
 
             return false;
@@ -181,6 +192,19 @@ class ReservationPayments
         }
 
         return true;
+    }
+
+    /** Re-hold an expired booking's seats; false if any of them has been booked since. */
+    private function reclaimSeats(Reservation $reservation): bool
+    {
+        try {
+            // Savepoint: the generated-column unique key rejects the update if a seat was re-booked.
+            DB::transaction(fn () => $reservation->reservationSeats()->update(['released_at' => null]));
+
+            return true;
+        } catch (UniqueConstraintViolationException) {
+            return false;
+        }
     }
 
     /** @param array<string, mixed> $session  @return array<string, mixed>|null */

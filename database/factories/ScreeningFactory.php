@@ -21,7 +21,7 @@ class ScreeningFactory extends Factory
             'end_time' => '20:00',
             'type' => 'free',
             'price' => null,
-            'total_seats' => 100,
+            'total_seats' => \App\Models\Seat::CAPACITY,
             'created_by' => User::factory(),
         ];
     }

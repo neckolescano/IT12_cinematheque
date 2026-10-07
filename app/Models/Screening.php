@@ -22,7 +22,7 @@ class Screening extends Model
 
     protected $attributes = [
         'type' => 'free',
-        'total_seats' => 100,
+        'total_seats' => Seat::CAPACITY,
     ];
 
     protected function casts(): array
@@ -54,20 +54,26 @@ class Screening extends Model
         return $this->hasMany(ReservationSeat::class, 'screening_id', 'screening_id');
     }
 
+    /** Seat rows still held (cancelled reservations release theirs). */
+    public function heldSeats(): HasMany
+    {
+        return $this->reservationSeats()->held();
+    }
+
     public function isPaid(): bool
     {
         return $this->type === 'paid';
     }
 
-    /** total_seats minus every seat row locked against this screening. */
+    /** total_seats minus every seat still held for this screening. */
     public function availableSeatCount(): int
     {
-        return max(0, $this->total_seats - $this->reservationSeats()->count());
+        return max(0, $this->total_seats - $this->heldSeats()->count());
     }
 
-    /** @return array<int> seat_ids already held for this screening */
+    /** @return array<int> seat_ids currently held for this screening */
     public function takenSeatIds(): array
     {
-        return $this->reservationSeats()->pluck('seat_id')->map(fn ($id) => (int) $id)->all();
+        return $this->heldSeats()->pluck('seat_id')->map(fn ($id) => (int) $id)->all();
     }
 }

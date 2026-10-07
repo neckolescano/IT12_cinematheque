@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Payment extends Model
 {
@@ -36,12 +35,6 @@ class Payment extends Model
     public function reservation(): BelongsTo
     {
         return $this->belongsTo(Reservation::class, 'reservation_id', 'reservation_id');
-    }
-
-    /** Screenshot proofs from the retired QR flow — kept read-only as payment history. */
-    public function proofs(): HasMany
-    {
-        return $this->hasMany(PaymentProof::class, 'payment_id', 'payment_id');
     }
 
     public function isPaid(): bool

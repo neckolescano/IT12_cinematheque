@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Validation\Rule;
 
 class Movie extends Model
 {
@@ -15,7 +16,104 @@ class Movie extends Model
 
     public $timestamps = false;
 
-    protected $fillable = ['title', 'runtime_minutes', 'rating', 'release_year', 'synopsis'];
+    protected $fillable = ['title', 'runtime_minutes', 'rating', 'release_year', 'synopsis', 'poster_path'];
+
+    /** MTRCB content ratings offered in the movie form. */
+    public const RATINGS = ['G', 'PG', 'PG-13', 'R-13', 'R-16', 'R-18'];
+
+    /** Folder on the "public" disk that holds uploaded posters. */
+    public const POSTER_DIR = 'posters';
+
+    /**
+     * Fixed genre options shown as chips on the screening and movie forms, plus "Other" with
+     * a typed genre. There is no separate genre admin. (Stored in the genres table + movie_genre.)
+     */
+    public const GENRES = [
+        'Drama', 'Comedy', 'Romance', 'Action', 'Thriller', 'Horror',
+        'Documentary', 'Animation', 'Musical', 'Historical', 'Experimental', 'Short Film',
+    ];
+
+    /** Validation for the film details shared by the screening form and the movie form. */
+    public static function detailRules(): array
+    {
+        return [
+            'runtime_minutes' => ['nullable', 'integer', 'min:1', 'max:600'],
+            'rating' => ['nullable', Rule::in(self::RATINGS)],
+            'release_year' => ['nullable', 'integer', 'min:1888', 'max:'.(now()->year + 5)],
+            'synopsis' => ['nullable', 'string', 'max:5000'],
+            'genres' => ['nullable', 'array'],
+            'genres.*' => ['string', Rule::in(self::GENRES)],
+            'genre_other_on' => ['nullable', 'boolean'],
+            'genre_other' => ['nullable', 'required_if_accepted:genre_other_on', 'string', 'max:100'],
+            'directors' => ['nullable', 'string', 'max:255'],
+            'actors' => ['nullable', 'string', 'max:1000'],
+        ];
+    }
+
+    /**
+     * The chosen chips plus any typed "Other" genres (comma-separated). A typed genre that is
+     * already on the list (any case) is stored under the listed name.
+     */
+    public static function genreList(array $data): array
+    {
+        $listed = collect(self::GENRES)->keyBy(fn ($g) => mb_strtolower($g));
+
+        return collect($data['genres'] ?? [])
+            ->merge(collect(self::parseNames($data['genre_other'] ?? null))->map(fn ($g) => $listed[mb_strtolower($g)] ?? mb_substr($g, 0, 50)))
+            ->unique(fn ($g) => mb_strtolower($g))->values()->all();
+    }
+
+    /** Genres that aren't on the fixed list, as the "Other" text box shows them. */
+    public function customGenres(): string
+    {
+        $listed = array_map('mb_strtolower', self::GENRES);
+
+        return $this->genres->pluck('genre_name')->reject(fn ($g) => in_array(mb_strtolower($g), $listed, true))->join(', ');
+    }
+
+    /** "Lav Diaz, Brillante Mendoza" → ['Lav Diaz', 'Brillante Mendoza'] (commas, semicolons or new lines). */
+    public static function parseNames(?string $text): array
+    {
+        return collect(preg_split('/[,;\n]+/', (string) $text))
+            ->map(fn ($name) => trim(preg_replace('/\s+/', ' ', $name)))
+            ->filter()->unique(fn ($n) => mb_strtolower($n))->values()->all();
+    }
+
+    /**
+     * Save the typed credits and chosen genres. Names typed on the form are matched to
+     * existing director/actor records or created behind the scenes, so staff never manage
+     * people separately. A person no longer credited on any film is removed.
+     */
+    public function syncDetails(array $genres, ?string $directors, ?string $actors): void
+    {
+        $this->genres()->sync(collect($genres)->map(fn ($g) => Genre::firstOrCreate(['genre_name' => $g])->genre_id));
+        $this->directors()->sync(collect(self::parseNames($directors))->map(fn ($n) => self::person(Director::class, $n)->director_id));
+        $this->actors()->sync(collect(self::parseNames($actors))->map(fn ($n) => self::person(Actor::class, $n)->actor_id));
+
+        Director::doesntHave('movies')->delete();
+        Actor::doesntHave('movies')->delete();
+    }
+
+    /** "Lamberto V. Avellana" → first "Lamberto V.", last "Avellana"; a single word is the last name. */
+    private static function person(string $model, string $name): Model
+    {
+        $parts = explode(' ', $name);
+        $last = array_pop($parts);
+
+        // Columns are 50 characters each; first_name is required, so a one-word name keeps it empty.
+        return $model::firstOrCreate(['first_name' => mb_substr(implode(' ', $parts), 0, 50), 'last_name' => mb_substr($last, 0, 50)]);
+    }
+
+    /** Credits as the comma-separated text the forms show. */
+    public function directorNames(): string
+    {
+        return $this->directors->map(fn ($d) => $d->full_name)->join(', ');
+    }
+
+    public function castNames(): string
+    {
+        return $this->actors->map(fn ($a) => $a->full_name)->join(', ');
+    }
 
     protected function casts(): array
     {
@@ -23,6 +121,13 @@ class Movie extends Model
             'runtime_minutes' => 'integer',
             'release_year' => 'integer',
         ];
+    }
+
+    /** Public URL of the poster image, or null (the UI then shows the generated tile). */
+    public function posterUrl(): ?string
+    {
+        // asset() follows the host the page was opened on, unlike Storage::url() (APP_URL).
+        return $this->poster_path ? asset('storage/'.$this->poster_path) : null;
     }
 
     public function screenings(): HasMany

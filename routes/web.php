@@ -19,6 +19,7 @@ Route::redirect('/', '/cinemathequecentredavao');
 Route::prefix('cinemathequecentredavao')->group(function () {
     Route::get('/', [PublicScreeningController::class, 'index'])->name('home');
     Route::get('screenings/{screening}', [PublicScreeningController::class, 'show'])->name('screenings.show');
+    Route::view('about', 'public.about')->name('about');
 
     Route::get('screenings/{screening}/reserve', [BookingController::class, 'create'])->name('bookings.create');
     Route::post('screenings/{screening}/reserve', [BookingController::class, 'store'])
@@ -26,6 +27,7 @@ Route::prefix('cinemathequecentredavao')->group(function () {
 
     Route::get('booking', [BookingController::class, 'lookup'])->name('bookings.lookup');
     Route::get('booking/{reservation:booking_reference}', [BookingController::class, 'show'])->name('bookings.show');
+    Route::get('booking/{reservation:booking_reference}/ticket', [BookingController::class, 'ticket'])->name('bookings.ticket');
 
     // PayMongo hosted checkout: start (or resume) payment, and the page PayMongo returns to.
     Route::get('booking/{reservation:booking_reference}/pay', [BookingController::class, 'pay'])
@@ -61,12 +63,14 @@ Route::prefix('ccdadmin')->group(function () {
         ->name('staff.')
         ->group(function () {
             Route::get('/', Staff\DashboardController::class)->name('dashboard');
+            Route::get('search', Staff\SearchController::class)->name('search');
 
             // Screenings workspace (details + attendee checklist + admission on one page)
             Route::resource('screenings', Staff\ScreeningController::class);
             Route::post('screenings/{screening}/approve-pending', [Staff\ScreeningController::class, 'approvePending'])->name('screenings.approve-pending');
 
             Route::post('reservation-seats/{reservationSeat}/attendance', [Staff\AttendanceController::class, 'store'])->name('attendances.store');
+            Route::post('reservations/{reservation}/admit', [Staff\AttendanceController::class, 'storeGroup'])->name('reservations.admit');
             Route::patch('attendances/{attendance}', [Staff\AttendanceController::class, 'update'])->name('attendances.update');
             Route::delete('attendances/{attendance}', [Staff\AttendanceController::class, 'destroy'])->name('attendances.destroy');
 
@@ -81,12 +85,8 @@ Route::prefix('ccdadmin')->group(function () {
             Route::get('reports', [Staff\ReportController::class, 'index'])->name('reports.index');
             Route::get('reports/export', [Staff\ReportController::class, 'export'])->name('reports.export');
 
-            // Settings
+            // Settings (directors, cast and genres are typed on the screening/movie forms; no separate admin)
             Route::resource('movies', Staff\MovieController::class)->except('show');
-            Route::resource('actors', Staff\ActorController::class)->only('index', 'store', 'edit', 'update', 'destroy');
-            Route::resource('directors', Staff\DirectorController::class)->only('index', 'store', 'edit', 'update', 'destroy');
-            Route::resource('genres', Staff\GenreController::class)->only('index', 'store', 'edit', 'update', 'destroy');
-            Route::resource('seats', Staff\SeatController::class)->only('index', 'store', 'destroy');
             Route::resource('users', Staff\UserController::class)->except('show', 'destroy');
         });
 });

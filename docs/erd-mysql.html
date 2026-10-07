@@ -16,7 +16,9 @@ body { background: #ffffff; margin: 16px; font-family: system-ui, sans-serif; }
 <h1>Cinematheque Centre Davao: ERD (MySQL data types)</h1>
 <p>Same entities and relationships as the original ERD, with MySQL column types. Mermaid can't show spaces in a type, so <code>BIGINT_UNSIGNED</code> means <code>BIGINT UNSIGNED</code>. <code>BOOLEAN</code> is stored as <code>TINYINT(1)</code>.</p>
 <p>Four relationship lines differ from the original ERD so that they match the written business rules in <code>implementation.md</code>: Movie–Screening is optional on the movie side (rule 2), a Reservation has <em>one or more</em> seats (rule 7), a Payment has <em>one or more</em> proofs (rule 12), and a proof has <em>zero or one</em> reviewer (rule 14). The tables and keys are unchanged.</p>
-<p><strong>2026-09-26 revision:</strong> <code>attendances.control_number</code> removed; PayMongo fields added to <code>payments</code>. <code>payment_proofs</code> and <code>payment_qr_codes</code> are retired (kept as history).</p>
+<p><strong>2026-09-26 revision:</strong> <code>attendances.control_number</code> removed; PayMongo fields added to <code>payments</code>. <code>payment_proofs</code> and <code>payment_qr_codes</code> retired.</p>
+<p><strong>2026-10-06 revision:</strong> cancelled bookings release their seats (<code>reservation_seats.released_at</code>, generated <code>held_seat_id</code>, <code>UNIQUE(screening_id, held_seat_id)</code>); unpaid bookings expire after 15 minutes (<code>reservations.cancellation_reason</code>, <code>cancelled_at</code>); <code>movies.poster_path</code> added; <code>payment_proofs</code> and <code>payment_qr_codes</code> dropped.</p>
+<p><strong>2026-10-07 revision:</strong> <code>reservation_attendees.pwd_id_no</code> added (optional PWD ID number; <code>pwd_indicator</code> is set when it is filled). Actors, directors and genres no longer have separate admin pages: they are entered on the screening/film form (genres from a fixed list). The tables and relationships are unchanged.</p>
 <div id="erd-mysql"></div>
 <script type="module">
 import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
@@ -39,6 +41,7 @@ const src = `erDiagram
     VARCHAR(10) rating "NULL"
     SMALLINT_UNSIGNED release_year "NULL"
     TEXT synopsis "NULL"
+    VARCHAR(255) poster_path "NULL"
   }
   ACTORS {
     BIGINT_UNSIGNED actor_id PK "AUTO_INCREMENT"
@@ -92,6 +95,8 @@ const src = `erDiagram
     BIGINT_UNSIGNED screening_id FK
     VARCHAR(20) booking_reference UK
     ENUM status "pending, confirmed, cancelled"
+    ENUM cancellation_reason "NULL: staff, payment_expired"
+    DATETIME cancelled_at "NULL"
     DATETIME reservation_datetime "DEFAULT CURRENT_TIMESTAMP"
     VARCHAR(50) lead_first_name
     VARCHAR(50) lead_middle_name "NULL"
@@ -102,8 +107,10 @@ const src = `erDiagram
   RESERVATION_SEATS {
     BIGINT_UNSIGNED reservation_seat_id PK "AUTO_INCREMENT"
     BIGINT_UNSIGNED reservation_id FK
-    BIGINT_UNSIGNED screening_id FK "UNIQUE with seat_id"
-    BIGINT_UNSIGNED seat_id FK "UNIQUE with screening_id"
+    BIGINT_UNSIGNED screening_id FK "UNIQUE with held_seat_id"
+    BIGINT_UNSIGNED seat_id FK
+    DATETIME released_at "NULL: set on cancel"
+    BIGINT_UNSIGNED held_seat_id "GENERATED: seat_id while held"
   }
   RESERVATION_ATTENDEES {
     BIGINT_UNSIGNED reservation_attendee_id PK "AUTO_INCREMENT"
@@ -118,6 +125,7 @@ const src = `erDiagram
     VARCHAR(20) contact_no "NULL"
     VARCHAR(100) email "NULL"
     VARCHAR(30) senior_card_no "NULL"
+    VARCHAR(30) pwd_id_no "NULL"
     BOOLEAN pwd_indicator "DEFAULT 0"
   }
   PAYMENTS {
@@ -126,27 +134,10 @@ const src = `erDiagram
     DECIMAL amount "(8,2)"
     VARCHAR(30) payment_channel "NULL"
     ENUM status "pending, verified, rejected"
-    VARCHAR(64) provider_session_id UK "PayMongo cs_; NULL"
-    VARCHAR(64) provider_payment_id "PayMongo pay_; NULL"
+    VARCHAR(64) provider_session_id UK "PayMongo session ID; NULL"
+    VARCHAR(64) provider_payment_id "PayMongo payment ID; NULL"
     DATETIME paid_at "NULL"
     DATETIME created_at "DEFAULT CURRENT_TIMESTAMP"
-  }
-  PAYMENT_PROOFS {
-    BIGINT_UNSIGNED proof_id PK "AUTO_INCREMENT"
-    BIGINT_UNSIGNED payment_id FK
-    VARCHAR(255) proof_image
-    DATETIME submitted_at
-    ENUM status "pending, accepted, rejected"
-    BIGINT_UNSIGNED reviewed_by FK "NULL"
-    DATETIME reviewed_at "NULL"
-    VARCHAR(255) rejection_reason "NULL"
-  }
-  PAYMENT_QR_CODES {
-    BIGINT_UNSIGNED qr_code_id PK "AUTO_INCREMENT"
-    VARCHAR(255) qr_image
-    BOOLEAN is_active "DEFAULT 1"
-    BIGINT_UNSIGNED uploaded_by FK
-    DATETIME uploaded_at
   }
   ATTENDANCES {
     BIGINT_UNSIGNED attendance_id PK "AUTO_INCREMENT"
@@ -170,9 +161,6 @@ const src = `erDiagram
   SCREENINGS ||--o{ RESERVATION_SEATS : locks
   RESERVATION_SEATS ||--|| RESERVATION_ATTENDEES : declared_as
   RESERVATIONS ||--o| PAYMENTS : may_have
-  PAYMENTS ||--|{ PAYMENT_PROOFS : has
-  USERS |o--o{ PAYMENT_PROOFS : reviews
-  USERS ||--o{ PAYMENT_QR_CODES : uploads
   RESERVATION_SEATS ||--o| ATTENDANCES : admission_for
   USERS ||--o{ ATTENDANCES : checks_in`;
 const { svg } = await mermaid.render('erd-mysql-svg', src);

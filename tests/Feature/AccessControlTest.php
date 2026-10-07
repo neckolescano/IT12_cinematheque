@@ -23,7 +23,7 @@ class AccessControlTest extends TestCase
     public function test_guests_are_redirected_from_every_staff_route(): void
     {
         foreach (['/ccdadmin', '/ccdadmin/screenings', '/ccdadmin/reservations', '/ccdadmin/users',
-                  '/ccdadmin/reports', '/ccdadmin/reports/export', '/ccdadmin/movies', '/ccdadmin/seats'] as $url) {
+                  '/ccdadmin/reports', '/ccdadmin/reports/export', '/ccdadmin/movies'] as $url) {
             $this->get($url)->assertRedirect(route('login'));
         }
     }
@@ -84,13 +84,15 @@ class AccessControlTest extends TestCase
         $this->assertTrue($user->fresh()->is_active);
     }
 
-    public function test_staff_links_only_render_for_staff(): void
+    public function test_customer_pages_never_link_to_the_admin_side_even_for_staff(): void
     {
         $screening = Screening::factory()->create();
+        $reservation = \App\Models\Reservation::factory()->for($screening)->withSeats(1)->create();
 
-        $this->get(route('screenings.show', $screening))->assertDontSee('Staff view of this screening');
-        $this->actingAs(User::factory()->create())
-            ->get(route('screenings.show', $screening))->assertSee('Staff view of this screening');
+        $this->actingAs(User::factory()->create());
+        foreach ([route('home'), route('screenings.show', $screening), route('bookings.show', $reservation), route('bookings.lookup'), route('about')] as $url) {
+            $this->get($url)->assertOk()->assertDontSee('Staff view')->assertDontSee('ccdadmin');
+        }
     }
 
     public function test_customer_and_admin_live_under_their_own_prefixes(): void

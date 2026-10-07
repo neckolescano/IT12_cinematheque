@@ -1,18 +1,18 @@
 @extends('layouts.staff')
 
-@section('title', $staff->exists ? 'Edit staff account' : 'Add staff account')
+@section('title', $staff->exists ? 'Edit staff account' : 'New staff account')
 
 @section('content')
     @php($editing = $staff->exists)
 
     <div class="page-head">
         <div>
-            <a class="crumb" style="color:var(--muted)" href="{{ route('staff.users.index') }}">&larr; Staff accounts</a>
-            <h1>{{ $editing ? 'Edit staff account' : 'Add staff account' }}</h1>
+            <a class="back-link" href="{{ route('staff.users.index') }}"><x-arrow dir="left" /> Staff accounts</a>
+            <h1>{{ $editing ? 'Edit staff account' : 'New staff account' }}</h1>
         </div>
     </div>
 
-    <form class="card reveal" style="max-width:760px" method="POST" action="{{ $editing ? route('staff.users.update', $staff) : route('staff.users.store') }}">
+    <form class="panel" style="max-width:760px" method="POST" action="{{ $editing ? route('staff.users.update', $staff) : route('staff.users.store') }}">
         @csrf
         @if ($editing) @method('PUT') @endif
 
@@ -47,7 +47,6 @@
                         <option value="{{ $pos }}" @selected(old('position', $staff->position) === $pos)>{{ $pos }}</option>
                     @endforeach
                 </select>
-                <span class="hint">Descriptive only — doesn't change access.</span>
                 @error('position') <span class="field__error">{{ $message }}</span> @enderror
             </div>
         </div>
@@ -68,13 +67,13 @@
         <input type="hidden" name="is_active" value="0">
         <label class="check">
             <input type="checkbox" name="is_active" value="1" @checked(old('is_active', $staff->is_active))>
-            Active — this account can log in
+            Active (can sign in)
         </label>
         @error('is_active') <div class="field__error">{{ $message }}</div> @enderror
 
         <div class="form-actions">
             <button type="submit" class="btn btn--primary">{{ $editing ? 'Save changes' : 'Create account' }}</button>
-            <a class="btn btn--ghost" href="{{ route('staff.users.index') }}">Cancel</a>
+            <a class="btn btn--secondary" href="{{ route('staff.users.index') }}">Cancel</a>
         </div>
     </form>
 @endsection

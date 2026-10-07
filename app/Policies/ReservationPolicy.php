@@ -15,7 +15,7 @@ class ReservationPolicy extends StaffPolicy
 
     /**
      * Staff can confirm a pending reservation for a free screening.
-     * A paid reservation is confirmed only by accepting a payment proof.
+     * A paid reservation is confirmed only when PayMongo reports it paid.
      */
     public function confirm(User $user, Reservation $reservation): bool
     {

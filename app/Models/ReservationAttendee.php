@@ -15,7 +15,7 @@ class ReservationAttendee extends Model
 
     protected $fillable = [
         'reservation_seat_id', 'is_lead_reserver', 'first_name', 'middle_name', 'last_name',
-        'age', 'sex', 'company_school', 'contact_no', 'email', 'senior_card_no', 'pwd_indicator',
+        'age', 'sex', 'company_school', 'contact_no', 'email', 'senior_card_no', 'pwd_id_no', 'pwd_indicator',
     ];
 
     protected $attributes = [

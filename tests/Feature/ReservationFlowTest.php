@@ -25,7 +25,7 @@ class ReservationFlowTest extends TestCase
     {
         $attendees = [];
         foreach ($seatIds as $id) {
-            $attendees[$id] = ['first_name' => 'Juan'.$id, 'last_name' => 'Dela Cruz', 'age' => 25, 'sex' => 'M', 'pwd_indicator' => '0'];
+            $attendees[$id] = ['first_name' => 'Juan'.$id, 'last_name' => 'Dela Cruz', 'age' => 25, 'sex' => 'M', 'company_school' => 'Ateneo de Davao', 'contact_no' => '0917 123 4567', 'email' => 'guest@example.test'];
         }
 
         return array_merge([
@@ -63,7 +63,7 @@ class ReservationFlowTest extends TestCase
         $this->assertCount(3, $reservation->attendees);
         $this->assertSame(1, $reservation->attendees()->where('is_lead_reserver', true)->count());
         $this->assertNull($reservation->payment);
-        $this->assertSame(97, $screening->availableSeatCount());
+        $this->assertSame(\App\Models\Seat::CAPACITY - 3, $screening->availableSeatCount());
 
         $this->get(route('bookings.show', $reservation))->assertOk()->assertSee($reservation->booking_reference);
     }
@@ -140,11 +140,43 @@ class ReservationFlowTest extends TestCase
             ->assertSessionHasErrors('seat_ids');
     }
 
-    public function test_booking_lookup_by_reference(): void
+    public function test_booking_lookup_by_reference_opens_the_ticket_only(): void
     {
         $reservation = Reservation::factory()->withSeats(1)->create();
 
         $this->get(route('bookings.lookup', ['reference' => strtolower($reservation->booking_reference)]))
-            ->assertRedirect(route('bookings.show', $reservation));
+            ->assertRedirect(route('bookings.ticket', $reservation));
+        $this->get(route('bookings.lookup', ['reference' => 'CCD-NOPE1234']))->assertSessionHasErrors('reference');
+
+        // The ticket page sits under "Find my booking"; the booking-flow page under "Screenings".
+        $ticket = $this->get(route('bookings.ticket', $reservation))->assertOk()->assertSee($reservation->booking_reference)->getContent();
+        $this->assertMatchesRegularExpression('#href="[^"]*/booking"\s+aria-current="page"#', $ticket);
+        $this->assertStringNotContainsString('class="status', $ticket);
+        $flow = $this->get(route('bookings.show', $reservation))->getContent();
+        $this->assertMatchesRegularExpression('#href="[^"]*/cinemathequecentredavao"\s+aria-current="page"#', $flow);
+    }
+
+    public function test_the_first_seat_is_the_primary_booker_and_mobile_takes_nine_digits(): void
+    {
+        $screening = Screening::factory()->create(['type' => 'free']);
+        [$a, $b] = Seat::orderBy('seat_id')->take(2)->get()->all();
+        $person = fn ($first, $email) => ['first_name' => $first, 'last_name' => 'Cruz', 'age' => 30, 'sex' => 'F', 'company_school' => 'UP Mindanao', 'contact_no' => '171234567', 'email' => $email];
+
+        // Seats in picking order: B first, so B's person is the booker. No "Your details" fields are sent.
+        $this->post(route('bookings.store', $screening), [
+            'seat_ids' => [$b->seat_id, $a->seat_id],
+            'attendees' => [$b->seat_id => $person('Bea', 'bea@example.test'), $a->seat_id => $person('Ana', 'ana@example.test')],
+        ])->assertSessionHasNoErrors();
+
+        $reservation = Reservation::with('attendees')->firstOrFail();
+        $this->assertSame('Bea', $reservation->lead_first_name);
+        $this->assertSame('bea@example.test', $reservation->lead_email);
+        $this->assertSame('+639171234567', $reservation->lead_contact_no);
+        $this->assertSame('Bea', $reservation->attendees->firstWhere('is_lead_reserver', true)->first_name);
+
+        // The details step lists the seats in the order they were picked.
+        $other = Screening::factory()->create(['type' => 'free']);
+        $this->get(route('bookings.create', ['screening' => $other, 'seats' => [$b->seat_id, $a->seat_id]]))
+            ->assertSeeInOrder(['Seat '.$b->seat_label, 'You · primary booker', 'Seat '.$a->seat_label]);
     }
 }

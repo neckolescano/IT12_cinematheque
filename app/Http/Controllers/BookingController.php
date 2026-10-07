@@ -13,6 +13,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
@@ -44,8 +45,11 @@ class BookingController extends Controller
                 'seats.*' => ['integer', 'distinct'],
             ]);
 
-            $selected = $seats->whereIn('seat_id', array_map('intval', $request->input('seats')))
+            // Kept in the order chosen: the first seat is the primary booker.
+            $chosen = array_map('intval', $request->input('seats'));
+            $selected = $seats->whereIn('seat_id', $chosen)
                 ->whereNotIn('seat_id', $takenSeatIds)
+                ->sortBy(fn ($seat) => array_search($seat->seat_id, $chosen, true))
                 ->values();
 
             if ($selected->count() !== count($request->input('seats'))) {
@@ -109,7 +113,8 @@ class BookingController extends Controller
                         'contact_no' => $attendee['contact_no'] ?? null,
                         'email' => $attendee['email'] ?? null,
                         'senior_card_no' => $attendee['senior_card_no'] ?? null,
-                        'pwd_indicator' => (bool) ($attendee['pwd_indicator'] ?? false),
+                        'pwd_id_no' => $attendee['pwd_id_no'] ?? null,
+                        'pwd_indicator' => filled($attendee['pwd_id_no'] ?? null),
                     ]);
                 }
 
@@ -145,7 +150,7 @@ class BookingController extends Controller
         }
 
         return redirect()->route('bookings.show', $reservation)
-            ->with('status', 'Reservation '.$reservation->booking_reference.' received. Your e-ticket will be emailed once staff approve it.'.$note);
+            ->with('booked', true)->with('status', 'Reservation '.$reservation->booking_reference.' received. Your e-ticket will be emailed once staff approve it.'.$note);
     }
 
     /** Send the customer to PayMongo's hosted checkout (reusing an open session). */
@@ -193,26 +198,70 @@ class BookingController extends Controller
             $paid = false;
         }
 
-        return $paid
-            ? redirect()->route('bookings.show', $reservation)
-                ->with('status', 'Payment received. Your reservation is confirmed and your e-ticket has been emailed to '.$reservation->lead_email.'.')
-            : redirect()->route('bookings.show', $reservation)
-                ->with('warning', 'We have not received confirmation from PayMongo yet. If you completed the payment, it can take a minute. Use "Check payment status" below.');
-    }
+        $back = redirect()->route('bookings.show', $reservation);
 
-    public function lookup(Request $request): View|RedirectResponse
-    {
-        if ($request->filled('reference')) {
-            $reservation = Reservation::where('booking_reference', strtoupper(trim($request->input('reference'))))->first();
-
-            if ($reservation) {
-                return redirect()->route('bookings.show', $reservation);
-            }
-
-            return back()->withInput()->withErrors(['reference' => 'No reservation found with that booking reference.']);
+        if (! $paid) {
+            return $back->with('warning', 'We have not received confirmation from PayMongo yet. If you completed the payment, it can take a minute. Use "Check payment status" below.');
         }
 
-        return view('public.bookings.lookup');
+        // Paid, but after the booking expired or was cancelled: it stays cancelled.
+        return $reservation->refresh()->status === 'confirmed'
+            ? $back->with('booked', true)->with('status', 'Payment received. Your reservation is confirmed and your e-ticket has been emailed to '.$reservation->lead_email.'.')
+            : $back->with('warning', 'We received your payment, but this booking was no longer active, so it could not be confirmed. Please contact Cinematheque Centre Davao about a refund and quote '.$reservation->booking_reference.'.');
+    }
+
+    /**
+     * Find my booking: by booking reference, OR by the booker's email (upcoming bookings only).
+     * The result is the ticket itself (bookings.ticket), not the booking-flow page.
+     */
+    public function lookup(Request $request): View|RedirectResponse
+    {
+        if (! $request->hasAny(['reference', 'email'])) {
+            return view('public.bookings.lookup');
+        }
+
+        $data = $request->validate([
+            'reference' => ['nullable', 'string', 'max:20', 'required_without:email'],
+            'email' => ['nullable', 'email', 'max:100', 'required_without:reference'],
+        ], ['reference.required_without' => 'Enter your booking reference or your email.'], ['reference' => 'booking reference']);
+
+        if (filled($data['reference'] ?? null)) {
+            $reservation = Reservation::where('booking_reference', strtoupper(trim($data['reference'])))->first();
+
+            return $reservation
+                ? redirect()->route('bookings.ticket', $reservation)
+                : back()->withInput()->withErrors(['reference' => 'No booking matches that reference. Check it and try again.']);
+        }
+
+        // By email: only bookings for screenings that haven't happened yet.
+        $matches = Reservation::with('screening')
+            ->whereRaw('LOWER(lead_email) = ?', [Str::lower(trim($data['email']))])
+            ->whereHas('screening', fn ($q) => $q->whereDate('event_date', '>=', today()))
+            ->get()
+            ->sortBy(fn (Reservation $r) => $r->screening->event_date->toDateString().' '.$r->screening->start_time)
+            ->values();
+
+        if ($matches->isEmpty()) {
+            return back()->withInput()->withErrors(['email' => 'No upcoming bookings for that email.']);
+        }
+
+        if ($matches->count() === 1) {
+            return redirect()->route('bookings.ticket', $matches->first());
+        }
+
+        return view('public.bookings.lookup', ['results' => $matches]);
+    }
+
+    /** The ticket on its own — what "Find my booking" opens. */
+    public function ticket(Reservation $reservation): View
+    {
+        $reservation->load('screening.movie', 'reservationSeats.seat', 'reservationSeats.attendee', 'payment');
+
+        return view('public.bookings.ticket', [
+            'reservation' => $reservation,
+            'payment' => $reservation->payment,
+            'canPay' => $reservation->payment && ! $reservation->payment->isPaid() && $reservation->status === 'pending',
+        ]);
     }
 
     /** Booking summary + payment status / "Pay with PayMongo". */
@@ -225,6 +274,7 @@ class BookingController extends Controller
             'reservation' => $reservation,
             'payment' => $payment,
             'canPay' => $payment && ! $payment->isPaid() && $reservation->status === 'pending',
+            'payBy' => $reservation->status === 'pending' ? $reservation->paymentDeadline() : null,
             'paymentsEnabled' => $payments->isConfigured(),
             'paymentCancelled' => $request->query('payment') === 'cancelled',
         ]);

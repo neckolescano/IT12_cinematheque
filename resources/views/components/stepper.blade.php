@@ -1,13 +1,10 @@
 @props(['current', 'paid' => true])
-{{-- Reservation progress: Seats → Details → Payment (paid only) → Confirmed. --}}
-@php
-    $steps = $paid ? ['Seats', 'Details', 'Payment', 'Confirmed'] : ['Seats', 'Details', 'Confirmed'];
-@endphp
-<ol {{ $attributes->merge(['class' => 'stepper']) }} aria-label="Reservation progress">
+{{-- Booking progress as in the mobile app: three gold bars — Seats, Details, Pay / Confirm. --}}
+@php($steps = ['Seats', 'Details', $paid ? 'Pay' : 'Confirm'])
+<ol {{ $attributes->merge(['class' => 'steps']) }} aria-label="Booking progress">
     @foreach ($steps as $i => $label)
-        @php($n = $i + 1)
-        <li class="{{ $n < $current ? 'is-done' : ($n === $current ? 'is-current' : '') }}" @if ($n === $current) aria-current="step" @endif>
-            <span>{{ $label }}</span>
+        <li @class(['is-done' => $i + 1 <= $current]) @if ($i + 1 === $current) aria-current="step" @endif>
+            <span>{{ $i + 1 }}. {{ $label }}</span>
         </li>
     @endforeach
 </ol>

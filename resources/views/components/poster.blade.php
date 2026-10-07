@@ -1,25 +1,24 @@
-@props(['screening', 'tall' => false])
-{{-- Generated poster tile. The schema has no poster image column, so each
-     screening gets a consistent cinematic gradient + its title instead. --}}
+@props(['screening' => null, 'movie' => null])
+{{-- Poster tile (2:3). A real poster is shown whole (contain) over a blurred copy of itself,
+     so posters of any proportion fit the frame without cropping. Without one: a generated tile. --}}
 @php
-    $variant = 'poster--v'.(($screening->screening_id % 4) + 1);
-    $title = $screening->movie?->title ?? $screening->event_title;
+    $movie = $movie ?? $screening?->movie;
+    $title = $movie?->title ?? $screening?->event_title ?? '';
+    $image = $movie?->posterUrl();
+    $seed = $screening?->screening_id ?? $movie?->movie_id ?? 0;
 @endphp
-<div {{ $attributes->merge(['class' => 'poster '.$variant.($tall ? ' poster--tall' : '')]) }} role="img" aria-label="Poster for {{ $title }}">
-    <svg class="poster__art" viewBox="0 0 300 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-        <defs>
-            <linearGradient id="beam-{{ $screening->screening_id }}" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stop-color="#fff" stop-opacity=".22"/>
-                <stop offset="1" stop-color="#fff" stop-opacity="0"/>
-            </linearGradient>
-        </defs>
-        <polygon points="300,0 300,26 40,200 0,200 0,170" fill="url(#beam-{{ $screening->screening_id }})"/>
-        <circle cx="262" cy="36" r="46" fill="none" stroke="#ebbc00" stroke-opacity=".35" stroke-width="1"/>
-        <circle cx="262" cy="36" r="30" fill="none" stroke="#ebbc00" stroke-opacity=".25" stroke-width="1"/>
-        <path d="M0 200 V176 H24 V164 H40 V180 H62 V150 H78 V182 H104 V168 H128 V186 H150 V160 H164 V146 H176 V172 H204 V184 H232 V166 H256 V178 H300 V200 Z" fill="#000" fill-opacity=".35"/>
-    </svg>
-    <div class="poster__inner">
-        <span class="poster__tag">{{ $slot }}</span>
-        <span class="poster__title">{{ $title }}</span>
-    </div>
+@if ($image)
+<div {{ $attributes->merge(['class' => 'poster poster--image']) }} role="img" aria-label="Poster for {{ $title }}">
+    <img class="poster__bg" src="{{ $image }}" alt="" aria-hidden="true" loading="lazy">
+    <img class="poster__img" src="{{ $image }}" alt="" loading="lazy">
 </div>
+@else
+<div {{ $attributes->merge(['class' => 'poster poster--v'.(($seed % 4) + 1)]) }} role="img" aria-label="{{ $title }}">
+    <svg class="poster__art" viewBox="0 0 200 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <circle cx="160" cy="60" r="70" fill="none" stroke="#ebbc00" stroke-opacity=".3"/>
+        <circle cx="160" cy="60" r="44" fill="none" stroke="#ebbc00" stroke-opacity=".22"/>
+        <path d="M0 300 V262 H22 V248 H40 V270 H62 V236 H80 V272 H104 V254 H128 V276 H150 V244 H166 V228 H178 V262 H200 V300 Z" fill="#000" fill-opacity=".35"/>
+    </svg>
+    <span class="poster__title">{{ $title }}</span>
+</div>
+@endif

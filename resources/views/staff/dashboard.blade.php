@@ -3,120 +3,105 @@
 @section('title', 'Dashboard')
 
 @section('content')
-    <div class="page-head">
+    <header class="page-head">
         <div>
-            <h1>Good {{ now()->hour < 12 ? 'morning' : (now()->hour < 18 ? 'afternoon' : 'evening') }}, {{ auth()->user()->first_name }}</h1>
-            <p>{{ now()->format('l, F j, Y') }}</p>
+            <span class="eyebrow">{{ now()->format('l, F j, Y') }}</span>
+            <h1>Dashboard</h1>
+            <p class="figures">
+                <a href="{{ route('staff.screenings.index') }}"><b>{{ $summary['upcoming'] }}</b> upcoming {{ Str::plural('screening', $summary['upcoming']) }}</a>
+                <a href="{{ route('staff.reservations.index', ['view' => 'payment']) }}"><b>{{ $summary['awaiting_payment'] }}</b> awaiting payment</a>
+                <a href="{{ route('staff.reports.index') }}"><b>₱{{ number_format($summary['paid_7d'], 0) }}</b> paid this week</a>
+            </p>
         </div>
-        <a class="btn btn--primary" href="{{ route('staff.screenings.create') }}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-            New screening
-        </a>
-    </div>
+        @can('create', App\Models\Screening::class)
+            <a class="btn btn--primary" href="{{ route('staff.screenings.create') }}">New screening</a>
+        @endcan
+    </header>
 
     @unless ($paymentsEnabled)
-        <div class="alert alert--warning"><div><strong>PayMongo is not configured.</strong> Customers can reserve paid screenings but cannot pay yet. Set <code>PAYMONGO_SECRET_KEY</code> in <code>.env</code>.</div></div>
+        <div class="alert alert--warning"><div><strong>PayMongo is not configured.</strong> Paid bookings can’t be paid. Set <code>PAYMONGO_SECRET_KEY</code> in <code>.env</code>.</div></div>
     @endunless
     @unless ($mailConfigured)
-        <div class="alert alert--warning"><div><strong>Email is not configured.</strong> Bookings still work, but e-tickets can't be sent. Set the <code>MAIL_*</code> values in <code>.env</code>.</div></div>
+        <div class="alert alert--warning"><div><strong>Email is not configured.</strong> E-tickets can’t be sent. Set the <code>MAIL_*</code> values in <code>.env</code>.</div></div>
     @endunless
 
-    <div class="stat-grid">
-        <a class="stat" href="{{ route('staff.screenings.index') }}">
-            <div class="stat__l">Upcoming screenings</div>
-            <div class="stat__n">{{ $stats['upcoming'] }}</div>
-        </a>
-        <a @class(['stat', 'stat--warn' => $stats['awaiting_approval']]) href="{{ route('staff.reservations.index', ['status' => 'pending', 'payment' => 'free']) }}">
-            <div class="stat__l">Free bookings to approve</div>
-            <div class="stat__n">{{ $stats['awaiting_approval'] }}</div>
-        </a>
-        <a class="stat" href="{{ route('staff.reservations.index', ['status' => 'pending', 'payment' => 'unpaid']) }}">
-            <div class="stat__l">Awaiting PayMongo payment</div>
-            <div class="stat__n">{{ $stats['awaiting_payment'] }}</div>
-        </a>
-        <a class="stat" href="{{ route('staff.reports.index') }}">
-            <div class="stat__l">Paid in the last 7 days</div>
-            <div class="stat__n">₱{{ number_format($stats['paid_7d'], 2) }}</div>
-        </a>
-    </div>
+    <div class="split">
+        <div class="split__main">
+            <section class="block" aria-labelledby="door-title">
+                <div class="block__head"><h2 id="door-title">Today</h2></div>
+                @if ($today->isEmpty())
+                    <p class="quiet">
+                        No screenings today.
+                        @if ($week->isNotEmpty())
+                            Next: <a href="{{ route('staff.screenings.show', $week->first()) }}">{{ $week->first()->event_title }}</a>, {{ $week->first()->event_date->format('l') }} at {{ \Carbon\Carbon::parse($week->first()->start_time)->format('g:i A') }}.
+                        @elseif ($next)
+                            Next: <a href="{{ route('staff.screenings.show', $next) }}">{{ $next->event_title }}</a> on {{ $next->event_date->format('M j') }}.
+                        @endif
+                    </p>
+                @else
+                    @include('staff.partials.screening-table', ['screenings' => $today, 'grouped' => false])
+                @endif
+            </section>
 
-    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));align-items:start">
-        <section class="card card--flush">
-            <div class="card__head"><h2>Today · admission</h2><span class="cell-sub">Open a screening to admit people</span></div>
-            @if ($today->isEmpty())
-                <x-empty title="No screenings today" />
-            @else
-                <div class="table-wrap">
-                    <table class="table">
-                        <tbody>
-                        @foreach ($today as $s)
-                            <tr data-href="{{ route('staff.screenings.show', $s) }}">
-                                <td style="width:1%;white-space:nowrap" class="cell-sub">{{ \Carbon\Carbon::parse($s->start_time)->format('g:i A') }}</td>
-                                <td><a class="cell-title link-quiet" href="{{ route('staff.screenings.show', $s) }}">{{ $s->event_title }}</a></td>
-                                <td style="min-width:170px">
-                                    <div class="meter">
-                                        <div class="progress progress--ok"><span style="width:{{ $s->reserved_count ? min(100, $s->admitted_count / $s->reserved_count * 100) : 0 }}%"></span></div>
-                                        <b>{{ $s->admitted_count }}/{{ $s->reserved_count }} in</b>
-                                    </div>
-                                </td>
-                                <td class="actions"><a class="btn btn--success btn--sm" href="{{ route('staff.screenings.show', $s) }}">Admit</a></td>
-                            </tr>
-                        @endforeach
-                        </tbody>
-                    </table>
+            <section class="block" aria-labelledby="week-title">
+                <div class="block__head">
+                    <h2 id="week-title">Next 7 days</h2>
+                    <a href="{{ route('staff.screenings.index') }}">Attendance</a>
                 </div>
-            @endif
-        </section>
+                @if ($week->isEmpty())
+                    <p class="quiet">Nothing scheduled.</p>
+                @else
+                    @include('staff.partials.screening-table', ['screenings' => $week])
+                @endif
+            </section>
+        </div>
 
-        <section class="card card--flush">
-            <div class="card__head"><h2>Next 14 days</h2><a class="btn btn--ghost btn--sm" href="{{ route('staff.screenings.index') }}">All screenings</a></div>
-            @if ($upcoming->isEmpty())
-                <x-empty title="Nothing scheduled in the next two weeks" />
-            @else
-                <div class="table-wrap">
-                    <table class="table">
-                        <tbody>
-                        @foreach ($upcoming as $s)
-                            <tr data-href="{{ route('staff.screenings.show', $s) }}">
-                                <td style="width:1%"><x-date-badge :date="$s->event_date" /></td>
-                                <td>
-                                    <a class="cell-title link-quiet" href="{{ route('staff.screenings.show', $s) }}">{{ $s->event_title }}</a>
-                                    <div class="cell-sub">{{ \Carbon\Carbon::parse($s->start_time)->format('g:i A') }} · {{ $s->isPaid() ? '₱'.number_format($s->price, 2) : 'Free' }}</div>
-                                </td>
-                                <td class="num" style="white-space:nowrap">{{ $s->reserved_count }}/{{ $s->total_seats }}</td>
-                                <td class="num">@if ($s->pending_count)<span class="badge badge--warning">{{ $s->pending_count }} pending</span>@endif</td>
-                            </tr>
-                        @endforeach
-                        </tbody>
-                    </table>
+        <aside class="split__side">
+            {{-- 3. Waiting on staff: approve right here, no page change --}}
+            <section class="block" aria-labelledby="action-title">
+                <div class="block__head">
+                    <h2 id="action-title">Needs action @if ($toApproveTotal + $refunds->count())<span class="count count--warn">{{ $toApproveTotal + $refunds->count() }}</span>@endif</h2>
+                    @if ($toApproveTotal > $toApprove->count())
+                        <a href="{{ route('staff.reservations.index', ['view' => 'approve']) }}">All {{ $toApproveTotal }}</a>
+                    @endif
                 </div>
-            @endif
-        </section>
-    </div>
+                @if ($toApprove->isEmpty() && $refunds->isEmpty())
+                    <p class="quiet">Nothing to approve or refund.</p>
+                @else
+                    @if ($toApprove->isNotEmpty())
+                        <h3 class="day">To approve</h3>
+                        <ul class="rows rows--compact">
+                            @foreach ($toApprove as $r)
+                                @include('staff.partials.booking-row', ['r' => $r, 'showState' => false])
+                            @endforeach
+                        </ul>
+                    @endif
+                    @if ($refunds->isNotEmpty())
+                        <h3 class="day">Refunds due</h3>
+                        <ul class="rows rows--compact">
+                            @foreach ($refunds as $r)
+                                @include('staff.partials.booking-row', ['r' => $r, 'showState' => false])
+                            @endforeach
+                        </ul>
+                    @endif
+                @endif
+            </section>
 
-    <section class="card card--flush" style="margin-top:20px">
-        <div class="card__head"><h2>Latest bookings</h2><a class="btn btn--ghost btn--sm" href="{{ route('staff.reservations.index') }}">All reservations</a></div>
-        @if ($recent->isEmpty())
-            <x-empty title="No bookings yet" icon="doc" />
-        @else
-            <div class="table-wrap">
-                <table class="table">
-                    <thead><tr><th>Reference</th><th>Booked by</th><th>Screening</th><th class="num">Seats</th><th>Reservation</th><th>Payment</th><th>When</th></tr></thead>
-                    <tbody>
-                    @foreach ($recent as $r)
-                        <tr data-href="{{ route('staff.reservations.show', $r) }}">
-                            <td><a style="font-weight:600" href="{{ route('staff.reservations.show', $r) }}">{{ $r->booking_reference }}</a></td>
-                            <td>{{ $r->lead_full_name }}</td>
-                            <td class="cell-sub">{{ $r->screening->event_title }}</td>
-                            <td class="num">{{ $r->reservation_seats_count }}</td>
-                            <td><x-status :value="$r->status === 'confirmed' ? 'approved' : $r->status" /></td>
-                            <td>@if ($r->payment)<x-status :value="$r->payment->isPaid() ? 'paid' : 'unpaid'" />@else<span class="badge badge--neutral badge--plain">Free</span>@endif</td>
-                            <td class="cell-sub">{{ $r->reservation_datetime->diffForHumans() }}</td>
-                        </tr>
-                    @endforeach
-                    </tbody>
-                </table>
-            </div>
-        @endif
-    </section>
+            <section class="block" aria-labelledby="recent-title">
+                <div class="block__head">
+                    <h2 id="recent-title">Recent bookings</h2>
+                    <a href="{{ route('staff.reservations.index') }}">View all</a>
+                </div>
+                @if ($recent->isEmpty())
+                    <p class="quiet">No bookings yet.</p>
+                @else
+                    <ul class="rows rows--compact">
+                        @foreach ($recent as $r)
+                            @include('staff.partials.booking-row', ['r' => $r])
+                        @endforeach
+                    </ul>
+                @endif
+            </section>
+        </aside>
+    </div>
 @endsection

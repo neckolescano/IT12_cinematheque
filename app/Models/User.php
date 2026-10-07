@@ -52,16 +52,6 @@ class User extends Authenticatable
         return $this->hasMany(Screening::class, 'created_by', 'user_id');
     }
 
-    public function reviewedPaymentProofs(): HasMany
-    {
-        return $this->hasMany(PaymentProof::class, 'reviewed_by', 'user_id');
-    }
-
-    public function uploadedQrCodes(): HasMany
-    {
-        return $this->hasMany(PaymentQrCode::class, 'uploaded_by', 'user_id');
-    }
-
     public function checkIns(): HasMany
     {
         return $this->hasMany(Attendance::class, 'checked_in_by', 'user_id');

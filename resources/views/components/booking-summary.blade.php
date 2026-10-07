@@ -1,9 +1,4 @@
 @props(['screening', 'seatLabels' => collect(), 'bookedBy' => null])
-{{--
-    Booking summary aside for the seat, details and payment steps.
-    On the seat step $seatLabels is empty and JS fills [data-seat-list] / [data-seat-count] /
-    [data-seat-total] as seats are picked. The slot holds the step's action button.
---}}
 @php($count = $seatLabels->count())
 <aside {{ $attributes->merge(['class' => 'card summary']) }} aria-labelledby="summary-title">
     <h2 class="card__title" id="summary-title" style="font-size:var(--fs-md)">Booking summary</h2>
@@ -17,9 +12,7 @@
     <dl>
         <div><dt>Date &amp; time</dt><dd>{{ $screening->event_date->format('D, M j, Y') }} · {{ \Carbon\Carbon::parse($screening->start_time)->format('g:i A') }}</dd></div>
         <div><dt>Seats</dt><dd data-seat-list>{{ $count ? $seatLabels->join(', ') : 'None selected yet' }}</dd></div>
-        @if ($bookedBy)
-            <div><dt>Booked by</dt><dd>{{ $bookedBy }}</dd></div>
-        @endif
+        @if ($bookedBy)<div><dt>Booked by</dt><dd>{{ $bookedBy }}</dd></div>@endif
     </dl>
     <div class="summary__total">
         <span class="muted small" data-seat-count>{{ $count }} {{ Str::plural('seat', $count) }}</span>

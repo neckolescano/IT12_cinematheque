@@ -10,6 +10,9 @@
 -- Tables are in dependency order: parents before children.
 -- Laravel's own support tables (password_reset_tokens, sessions, cache,
 -- jobs, migrations) are not included.
+-- Updated 2026-10-06: seat release on cancel + unpaid expiry columns,
+-- movies.poster_path; payment_proofs / payment_qr_codes dropped.
+-- Updated 2026-10-07: reservation_attendees.pwd_id_no added.
 -- =====================================================================
 
 SET NAMES utf8mb4;
@@ -35,6 +38,7 @@ CREATE TABLE `movies` (
   `rating` varchar(10) DEFAULT NULL,
   `release_year` smallint unsigned DEFAULT NULL,
   `synopsis` text DEFAULT NULL,
+  `poster_path` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`movie_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -122,6 +126,8 @@ CREATE TABLE `reservations` (
   `screening_id` bigint unsigned NOT NULL,
   `booking_reference` varchar(20) NOT NULL,
   `status` enum('pending','confirmed','cancelled') NOT NULL DEFAULT 'pending',
+  `cancellation_reason` enum('staff','payment_expired') DEFAULT NULL,
+  `cancelled_at` datetime DEFAULT NULL,
   `reservation_datetime` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `lead_first_name` varchar(50) NOT NULL,
   `lead_middle_name` varchar(50) DEFAULT NULL,
@@ -140,8 +146,10 @@ CREATE TABLE `reservation_seats` (
   `reservation_id` bigint unsigned NOT NULL,
   `screening_id` bigint unsigned NOT NULL,
   `seat_id` bigint unsigned NOT NULL,
+  `released_at` datetime DEFAULT NULL,
+  `held_seat_id` bigint unsigned GENERATED ALWAYS AS (if(`released_at` is null,`seat_id`,NULL)) STORED,
   PRIMARY KEY (`reservation_seat_id`),
-  UNIQUE KEY `reservation_seats_screening_id_seat_id_unique` (`screening_id`,`seat_id`),
+  UNIQUE KEY `reservation_seats_held_unique` (`screening_id`,`held_seat_id`),
   KEY `reservation_seats_reservation_id_foreign` (`reservation_id`),
   KEY `reservation_seats_seat_id_foreign` (`seat_id`),
   CONSTRAINT `reservation_seats_reservation_id_foreign` FOREIGN KEY (`reservation_id`) REFERENCES `reservations` (`reservation_id`) ON DELETE CASCADE,
@@ -162,6 +170,7 @@ CREATE TABLE `reservation_attendees` (
   `contact_no` varchar(20) DEFAULT NULL,
   `email` varchar(100) DEFAULT NULL,
   `senior_card_no` varchar(30) DEFAULT NULL,
+  `pwd_id_no` varchar(30) DEFAULT NULL,
   `pwd_indicator` tinyint NOT NULL DEFAULT 0,
   PRIMARY KEY (`reservation_attendee_id`),
   UNIQUE KEY `reservation_attendees_reservation_seat_id_unique` (`reservation_seat_id`),
@@ -182,34 +191,6 @@ CREATE TABLE `payments` (
   UNIQUE KEY `payments_reservation_id_unique` (`reservation_id`),
   UNIQUE KEY `payments_provider_session_id_unique` (`provider_session_id`),
   CONSTRAINT `payments_reservation_id_foreign` FOREIGN KEY (`reservation_id`) REFERENCES `reservations` (`reservation_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `payment_proofs` (
-  `proof_id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `payment_id` bigint unsigned NOT NULL,
-  `proof_image` varchar(255) NOT NULL,
-  `submitted_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `status` enum('pending','accepted','rejected') NOT NULL DEFAULT 'pending',
-  `reviewed_by` bigint unsigned DEFAULT NULL,
-  `reviewed_at` datetime DEFAULT NULL,
-  `rejection_reason` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`proof_id`),
-  KEY `payment_proofs_payment_id_foreign` (`payment_id`),
-  KEY `payment_proofs_reviewed_by_foreign` (`reviewed_by`),
-  KEY `payment_proofs_status_index` (`status`),
-  CONSTRAINT `payment_proofs_payment_id_foreign` FOREIGN KEY (`payment_id`) REFERENCES `payments` (`payment_id`) ON DELETE CASCADE,
-  CONSTRAINT `payment_proofs_reviewed_by_foreign` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`user_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE `payment_qr_codes` (
-  `qr_code_id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `qr_image` varchar(255) NOT NULL,
-  `is_active` tinyint NOT NULL DEFAULT 1,
-  `uploaded_by` bigint unsigned NOT NULL,
-  `uploaded_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`qr_code_id`),
-  KEY `payment_qr_codes_uploaded_by_foreign` (`uploaded_by`),
-  CONSTRAINT `payment_qr_codes_uploaded_by_foreign` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `attendances` (

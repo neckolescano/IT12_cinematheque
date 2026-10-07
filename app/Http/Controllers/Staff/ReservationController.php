@@ -26,14 +26,17 @@ class ReservationController extends Controller
         Gate::authorize('viewAny', Reservation::class);
 
         $filters = $request->validate([
+            'view' => ['nullable', Rule::in(array_keys(self::VIEWS))],
             'screening_id' => ['nullable', 'integer'],
             'status' => ['nullable', Rule::in(Reservation::STATUSES)],
             'payment' => ['nullable', Rule::in(['paid', 'unpaid', 'free'])],
             'q' => ['nullable', 'string', 'max:100'],
         ]);
 
-        $reservations = Reservation::with('screening', 'payment')
-            ->withCount('reservationSeats')
+        $counts = collect(self::VIEWS)->map(fn ($v, $key) => $this->applyView(Reservation::query(), $key)
+            ->when($filters['screening_id'] ?? null, fn ($q, $id) => $q->where('screening_id', $id))->count());
+
+        $reservations = $this->applyView(Reservation::with('screening', 'payment', 'reservationSeats.seat')->withCount('reservationSeats'), $filters['view'] ?? 'all')
             ->when($filters['screening_id'] ?? null, fn ($q, $id) => $q->where('screening_id', $id))
             ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
             ->when($filters['payment'] ?? null, fn ($q, $p) => match ($p) {
@@ -59,7 +62,30 @@ class ReservationController extends Controller
             'reservations' => $reservations,
             'screenings' => Screening::orderByDesc('event_date')->limit(100)->get(),
             'filters' => $filters,
+            'counts' => $counts,
         ]);
+    }
+
+    /** Quick filters, named after what staff want to see rather than database fields. */
+    public const VIEWS = [
+        'all' => 'All',
+        'approve' => 'To approve',
+        'payment' => 'Awaiting payment',
+        'approved' => 'Approved',
+        'refund' => 'Refund due',
+        'cancelled' => 'Cancelled',
+    ];
+
+    private function applyView($query, string $view)
+    {
+        return match ($view) {
+            'approve' => $query->where('status', 'pending')->doesntHave('payment'),
+            'payment' => $query->where('status', 'pending')->has('payment'),
+            'approved' => $query->where('status', 'confirmed'),
+            'refund' => $query->where('status', 'cancelled')->whereHas('payment', fn ($p) => $p->where('status', 'verified')),
+            'cancelled' => $query->where('status', 'cancelled'),
+            default => $query,
+        };
     }
 
     public function show(Reservation $reservation): View
@@ -71,7 +97,7 @@ class ReservationController extends Controller
             'reservationSeats.seat',
             'reservationSeats.attendee',
             'reservationSeats.attendance.checkedInBy',
-            'payment.proofs',
+            'payment',
         );
 
         return view('staff.reservations.show', compact('reservation'));
@@ -91,7 +117,8 @@ class ReservationController extends Controller
     {
         Gate::authorize('cancel', $reservation);
 
-        $reservation->update(['status' => 'cancelled']);
+        // Releases the seats for other bookings; the record and attendee list stay.
+        $reservation->cancel('staff');
 
         return back()->with(...$this->notice('Reservation cancelled.', $this->mailer->cancelled($reservation), 'cancellation notice'));
     }
@@ -123,14 +150,18 @@ class ReservationController extends Controller
             return back()->with('warning', 'Could not reach PayMongo: '.$e->getMessage());
         }
 
-        return back()->with('status', $paid ? 'PayMongo reports this booking as paid.' : 'PayMongo has no completed payment for this booking yet.');
+        return match (true) {
+            ! $paid => back()->with('status', 'PayMongo has no completed payment for this booking yet.'),
+            $reservation->refresh()->status === 'cancelled' => back()->with('warning', 'PayMongo reports this booking as paid, but the booking is cancelled. A refund is due.'),
+            default => back()->with('status', 'PayMongo reports this booking as paid.'),
+        };
     }
 
     /** @return array{0: string, 1: string} flash key + message */
     private function notice(string $done, bool $emailed, string $what): array
     {
         return $emailed
-            ? ['status', $done.' The '.$what.' was emailed to the customer.']
-            : ['warning', $done.' But the '.$what.' email could not be sent — use "Resend email" once mail is configured.'];
+            ? ['status', $done.' '.ucfirst($what).' emailed.']
+            : ['warning', $done.' The '.$what.' email was not sent. Use "Resend email" once mail works.'];
     }
 }

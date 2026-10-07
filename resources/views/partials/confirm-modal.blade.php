@@ -5,7 +5,7 @@
         <p class="muted" data-modal-message></p>
     </div>
     <div class="modal__actions">
-        <button type="button" class="btn btn--ghost" data-modal-cancel>Go back</button>
+        <button type="button" class="btn btn--secondary" data-modal-cancel>Go back</button>
         <button type="button" class="btn btn--dark" data-modal-confirm>Confirm</button>
     </div>
 </dialog>

@@ -1,99 +1,144 @@
 @extends('layouts.staff')
 
-@section('title', 'Reports')
+@section('title', $view === 'demographics' ? 'Demographic report' : 'Reports')
 
 @section('content')
-    <div class="page-head">
-        <div>
-            <span class="eyebrow">Attendance & payments</span>
-            <h1>Reports</h1>
-            <p class="muted small" style="margin:0">{{ \Carbon\Carbon::parse($from)->format('M j, Y') }} – {{ \Carbon\Carbon::parse($to)->format('M j, Y') }}</p>
-        </div>
-        <a class="btn btn--primary" href="{{ route('staff.reports.export', ['from' => $from, 'to' => $to]) }}" download>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3"/></svg>
-            Export CSV
-        </a>
-    </div>
+    @php
+        $presets = [
+            'Last 30 days' => [today()->subDays(30), today()],
+            'This month' => [today()->startOfMonth(), today()->endOfMonth()],
+            'Next 30 days' => [today(), today()->addDays(30)],
+            'Last 30 + next 30' => [today()->subDays(30), today()->addDays(30)],
+        ];
+        $viewParam = $view === 'demographics' ? ['view' => 'demographics'] : [];
+        $range = ['from' => $from, 'to' => $to];
+    @endphp
 
-    <form class="card reveal" style="margin-bottom:var(--s-5)" method="GET" action="{{ route('staff.reports.index') }}">
-        <div class="filters">
-            <div class="field">
-                <label for="from">From</label>
-                <input type="date" id="from" name="from" value="{{ $from }}">
-            </div>
-            <div class="field">
-                <label for="to">To</label>
-                <input type="date" id="to" name="to" value="{{ $to }}">
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn--dark">Run report</button>
-            </div>
+    <header class="page-head">
+        <div>
+            <h1>Reports</h1>
+            <p>{{ \Carbon\Carbon::parse($from)->format('M j, Y') }} – {{ \Carbon\Carbon::parse($to)->format('M j, Y') }}</p>
+        </div>
+        <a class="btn btn--primary" href="{{ route('staff.reports.export', $range + $viewParam) }}" download>Export CSV</a>
+    </header>
+
+    <nav class="tabs" aria-label="Report">
+        <a href="{{ route('staff.reports.index', $range) }}" @if ($view === 'attendance') aria-current="page" @endif>Attendance</a>
+        <a href="{{ route('staff.reports.index', $range + ['view' => 'demographics']) }}" @if ($view === 'demographics') aria-current="page" @endif>Demographics</a>
+    </nav>
+
+    <form class="filterbar" method="GET" action="{{ route('staff.reports.index') }}" data-no-loading>
+        @if ($viewParam)<input type="hidden" name="view" value="demographics">@endif
+        <nav class="chips" aria-label="Date range">
+            @foreach ($presets as $label => [$f, $t])
+                <a href="{{ route('staff.reports.index', ['from' => $f->toDateString(), 'to' => $t->toDateString()] + $viewParam) }}"
+                   @if ($from === $f->toDateString() && $to === $t->toDateString()) aria-current="page" @endif>{{ $label }}</a>
+            @endforeach
+        </nav>
+        <div class="filterbar__inputs">
+            <label class="range"><span>From</span><input type="date" name="from" value="{{ $from }}"></label>
+            <label class="range"><span>To</span><input type="date" name="to" value="{{ $to }}"></label>
+            <button type="submit" class="btn btn--dark btn--sm">Apply</button>
         </div>
     </form>
 
-    <div class="stat-grid">
-        <div class="stat reveal" data-stagger><div class="stat__n">{{ $screenings->sum('reserved') }}</div><div class="stat__l">Seats reserved</div></div>
-        <div class="stat reveal" data-stagger><div class="stat__n" style="color:var(--success)">{{ $screenings->sum('attended') }}</div><div class="stat__l">Checked in</div></div>
-        <div class="stat reveal" data-stagger><div class="stat__n" style="color:var(--warning)">{{ $screenings->sum('no_shows') }}</div><div class="stat__l">No-shows (past screenings)</div></div>
-        <div class="stat reveal" data-stagger><div class="stat__n">₱{{ number_format($screenings->sum('verified_amount'), 2) }}</div><div class="stat__l">Verified payments</div></div>
-    </div>
+    @if ($view === 'demographics')
+        {{-- Everyone actually admitted, with the details from the logsheet. --}}
+        <p class="figures figures--lg">
+            <span><b>{{ $summary['total'] }}</b> admitted</span>
+            <span><b>{{ $summary['male'] }}</b> male</span>
+            <span><b>{{ $summary['female'] }}</b> female</span>
+            <span><b>{{ $summary['senior'] }}</b> senior citizens</span>
+            <span><b>{{ $summary['pwd'] }}</b> PWD</span>
+        </p>
 
-    <section class="card reveal">
-        <div class="card__head">
-            <h2>Reserved vs. attended</h2>
-            <span class="muted small">Cancelled reservations excluded · no-shows counted after the screening date</span>
-        </div>
-        @if ($screenings->isEmpty())
-            <x-empty title="No screenings in this range" icon="doc">Try a wider date range.</x-empty>
-        @else
-            <div class="table-wrap">
-                <table class="table">
-                    <thead><tr><th>Date</th><th>Event</th><th class="num">Reserved</th><th class="num">Checked in</th><th class="num">No-shows</th><th class="num">Verified</th></tr></thead>
-                    <tbody>
-                    @foreach ($screenings as $row)
-                        <tr>
-                            <td class="small">{{ $row['screening']->event_date->format('M j, Y') }}</td>
-                            <td><a class="link-quiet" style="font-weight:600" href="{{ route('staff.screenings.show', $row['screening']) }}">{{ $row['screening']->event_title }}</a></td>
-                            <td class="num">{{ $row['reserved'] }}</td>
-                            <td class="num">{{ $row['attended'] }}</td>
-                            <td class="num">{{ $row['no_shows'] ?? '—' }}</td>
-                            <td class="num">₱{{ number_format($row['verified_amount'], 2) }}</td>
-                        </tr>
-                    @endforeach
-                    </tbody>
-                    <tfoot>
-                    <tr>
-                        <th colspan="2">Total</th>
-                        <th class="num">{{ $screenings->sum('reserved') }}</th>
-                        <th class="num">{{ $screenings->sum('attended') }}</th>
-                        <th class="num">{{ $screenings->sum('no_shows') }}</th>
-                        <th class="num">₱{{ number_format($screenings->sum('verified_amount'), 2) }}</th>
-                    </tr>
-                    </tfoot>
-                </table>
+        <section aria-labelledby="admitted-title">
+            <div class="block__head">
+                <h2 id="admitted-title">Admitted moviegoers</h2>
+                <span class="muted small">Excludes no-shows and cancelled bookings</span>
             </div>
-        @endif
-    </section>
+            @if ($admitted->isEmpty())
+                <x-empty title="No one admitted in this range" icon="doc" />
+            @else
+                <div class="table-wrap">
+                    <table class="table table--compact">
+                        <thead>
+                        <tr>
+                            <th>Date</th><th>Event</th><th>Name</th><th class="num">Age</th><th>Sex</th>
+                            <th>Company / school</th><th>Contact no.</th><th>Email</th><th>Senior ID</th><th>PWD</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach ($admitted as $rs)
+                            @php $a = $rs->attendee; @endphp
+                            <tr>
+                                <td class="nowrap">{{ $rs->screening->event_date->format('M j') }}</td>
+                                <td><a class="link-quiet" href="{{ route('staff.screenings.show', $rs->screening) }}">{{ $rs->screening->event_title }}</a></td>
+                                <td class="cell-title">{{ $a?->full_name ?? '—' }}</td>
+                                <td class="num">{{ $a?->age ?? '—' }}</td>
+                                <td>{{ $a?->sex ?? '—' }}</td>
+                                <td>{{ $a?->company_school ?: '—' }}</td>
+                                <td class="nowrap">{{ $a?->contact_no ?: '—' }}</td>
+                                <td>{{ $a?->email ?: '—' }}</td>
+                                <td>{{ $a?->senior_card_no ?: '—' }}</td>
+                                <td>{{ $a?->pwd_id_no ?: ($a?->pwd_indicator ? 'Yes' : '—') }}</td>
+                            </tr>
+                        @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination">{{ $admitted->links() }}</div>
+            @endif
+        </section>
+    @else
+        @php
+            $reserved = $screenings->sum('reserved');
+            $attended = $screenings->sum('attended');
+        @endphp
+        <p class="figures figures--lg">
+            <span><b>{{ $reserved }}</b> seats reserved</span>
+            <span><b>{{ $attended }}</b> admitted{{ $reserved ? ' ('.round($attended / $reserved * 100).'%)' : '' }}</span>
+            <span class="figures__warn"><b>{{ $screenings->sum('no_shows') }}</b> no-shows</span>
+            <span><b>₱{{ number_format($screenings->sum('verified_amount'), 0) }}</b> paid</span>
+        </p>
 
-    <section class="card reveal" style="margin-top:var(--s-5)">
-        <div class="card__head"><h2>Check-ins by staff member</h2></div>
-        @if ($checkIns->isEmpty())
-            <x-empty title="No check-ins in this range" />
-        @else
-            <div class="table-wrap">
-                <table class="table">
-                    <thead><tr><th>Staff</th><th>Position</th><th class="num">Check-ins</th></tr></thead>
-                    <tbody>
-                    @foreach ($checkIns as $row)
-                        <tr>
-                            <td>{{ $row['user']->full_name }}</td>
-                            <td>{{ $row['user']->position ?? '—' }}</td>
-                            <td class="num">{{ $row['count'] }}</td>
-                        </tr>
-                    @endforeach
-                    </tbody>
-                </table>
-            </div>
-        @endif
-    </section>
+            <section aria-labelledby="per-screening">
+                <div class="block__head">
+                    <h2 id="per-screening">Reserved vs. attended</h2>
+                    <span class="muted small">Excludes cancelled bookings</span>
+                </div>
+                @if ($screenings->isEmpty())
+                    <x-empty title="No screenings in this range" icon="doc" />
+                @else
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead><tr><th>Screening</th><th class="num">Reserved</th><th class="num">Admitted</th><th class="num">No-shows</th><th class="num">Payments</th></tr></thead>
+                            <tbody>
+                            @foreach ($screenings as $row)
+                                <tr data-href="{{ route('staff.screenings.show', $row['screening']) }}">
+                                    <td>
+                                        <a class="cell-title link-quiet" href="{{ route('staff.screenings.show', $row['screening']) }}">{{ $row['screening']->event_title }}</a>
+                                        <div class="cell-sub">{{ $row['screening']->event_date->format('D, M j') }}</div>
+                                    </td>
+                                    <td class="num">{{ $row['reserved'] }}</td>
+                                    <td class="num">{{ $row['attended'] }}</td>
+                                    <td class="num">{{ $row['no_shows'] ?? '—' }}</td>
+                                    <td class="num">{{ $row['verified_amount'] > 0 ? '₱'.number_format($row['verified_amount'], 0) : '—' }}</td>
+                                </tr>
+                            @endforeach
+                            </tbody>
+                            <tfoot>
+                            <tr>
+                                <th>Total</th>
+                                <th class="num">{{ $reserved }}</th>
+                                <th class="num">{{ $attended }}</th>
+                                <th class="num">{{ $screenings->sum('no_shows') }}</th>
+                                <th class="num">₱{{ number_format($screenings->sum('verified_amount'), 0) }}</th>
+                            </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                @endif
+            </section>
+    @endif
 @endsection

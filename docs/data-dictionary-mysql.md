@@ -38,7 +38,14 @@ Staff accounts only. AVT and PDO have identical access.
 | runtime_minutes | SMALLINT UNSIGNED | Yes | | NULL | Running time in minutes |
 | rating | VARCHAR(10) | Yes | | NULL | Content rating, e.g. PG-13 |
 | release_year | SMALLINT UNSIGNED | Yes | | NULL | Year of release. `YEAR` is not used because it only covers 1901–2155 |
+| poster_path | VARCHAR(255) | Yes | | NULL | Poster image on the `public` disk, e.g. `posters/himala.jpg`. NULL = generated tile. *Added 2026-10-06* |
 | synopsis | TEXT | Yes | | NULL | Plot description |
+
+### Film details: how actors, directors and genres are entered *(2026-10-07)*
+Tables 3–8 are unchanged, but they no longer have their own admin pages. Staff enter a film's details on the **Add/Edit Screening** form (or the Film catalog form):
+- **Director** and **Actors** are typed as text, separated by commas, semicolons or new lines. Each name is split into first name (everything but the last word) and last name (the last word), then matched or created in `directors` / `actors`. People who are no longer credited on any film are deleted.
+- **Genres** are chosen as chips from a fixed list in the app (`Movie::GENRES`: Drama, Comedy, Romance, Action, Thriller, Horror, Documentary, Animation, Musical, Historical, Experimental, Short Film). A row is created in `genres` the first time a value is used.
+- A film typed on the screening form is matched to an existing `movies` row by title (case-insensitive) or created. Blank fields never erase values already in the catalog.
 
 ### Table 3: actors
 | Field | MySQL type | Null | Key | Default | Description |
@@ -116,6 +123,8 @@ Composite primary key: `(movie_id, genre_id)`.
 | screening_id | BIGINT UNSIGNED | No | FK → screenings.screening_id (RESTRICT) | | Screening booked |
 | booking_reference | VARCHAR(20) | No | UNIQUE | | e.g. CCD-7K2QX9AB |
 | status | ENUM('pending','confirmed','cancelled') | No | INDEX | 'pending' | Reservation state |
+| cancellation_reason | ENUM('staff','payment_expired') | Yes | | NULL | Why it was cancelled: by staff, or a paid-screening booking not paid within 15 minutes. *Added 2026-10-06* |
+| cancelled_at | DATETIME | Yes | | NULL | When it was cancelled. *Added 2026-10-06* |
 | reservation_datetime | DATETIME | No | | CURRENT_TIMESTAMP | When the booking was submitted |
 | lead_first_name | VARCHAR(50) | No | | | Booker's first name |
 | lead_middle_name | VARCHAR(50) | Yes | | NULL | Booker's middle name |
@@ -130,8 +139,10 @@ Composite primary key: `(movie_id, genre_id)`.
 | reservation_id | BIGINT UNSIGNED | No | FK → reservations.reservation_id (CASCADE) | | Owning reservation |
 | screening_id | BIGINT UNSIGNED | No | FK → screenings.screening_id (RESTRICT) | | Stored here as well so the unique key below can use it |
 | seat_id | BIGINT UNSIGNED | No | FK → seats.seat_id (RESTRICT) | | Physical seat |
+| released_at | DATETIME | Yes | | NULL | Set when the reservation is cancelled; the row stays as history. *Added 2026-10-06* |
+| held_seat_id | BIGINT UNSIGNED, generated (STORED) | Yes | UNIQUE with screening_id | | `IF(released_at IS NULL, seat_id, NULL)`. *Added 2026-10-06* |
 
-`UNIQUE (screening_id, seat_id)` means the same seat can't be booked twice for the same screening.
+`UNIQUE (screening_id, held_seat_id)` means a seat can't be held twice for the same screening. Because `held_seat_id` becomes NULL when a booking is cancelled (and UNIQUE allows many NULLs), a released seat can be booked again. It replaced `UNIQUE (screening_id, seat_id)` on 2026-10-06 (decision: cancelled bookings release their seats).
 
 ### Table 13: reservation_attendees
 | Field | MySQL type | Null | Key | Default | Description |
@@ -148,7 +159,8 @@ Composite primary key: `(movie_id, genre_id)`.
 | contact_no | VARCHAR(20) | Yes | | NULL | Phone number |
 | email | VARCHAR(100) | Yes | | NULL | Email |
 | senior_card_no | VARCHAR(30) | Yes | | NULL | Senior citizen ID |
-| pwd_indicator | BOOLEAN (TINYINT(1)) | No | | 0 | Person with disability |
+| pwd_id_no | VARCHAR(30) | Yes | | NULL | PWD ID number (optional). *Added 2026-10-07* |
+| pwd_indicator | BOOLEAN (TINYINT(1)) | No | | 0 | Person with disability. Set to 1 by the app when `pwd_id_no` is filled |
 
 ### Table 14: payments
 Online payment through PayMongo hosted Checkout. The status becomes `verified` only when PayMongo's API reports the session as paid.
@@ -165,30 +177,8 @@ Online payment through PayMongo hosted Checkout. The status becomes `verified` o
 | paid_at | DATETIME | Yes | | NULL | When PayMongo recorded the payment. *Added 2026-09-26* |
 | created_at | DATETIME | No | | CURRENT_TIMESTAMP | When the payment record was created (reservation submitted) |
 
-### Table 15: payment_proofs *(retired, kept as history)*
-Used by the old QR + screenshot flow, which PayMongo replaced on 2026-09-26. The app no longer writes to this table. Any existing rows are shown read-only on the staff reservation page.
-
-| Field | MySQL type | Null | Key | Default | Description |
-|---|---|---|---|---|---|
-| proof_id | BIGINT UNSIGNED AUTO_INCREMENT | No | PK | | Proof submission ID |
-| payment_id | BIGINT UNSIGNED | No | FK → payments.payment_id (CASCADE) | | Payment it supports |
-| proof_image | VARCHAR(255) | No | | | Stored file path |
-| submitted_at | DATETIME | No | | CURRENT_TIMESTAMP | Upload time |
-| status | ENUM('pending','accepted','rejected') | No | INDEX | 'pending' | Review outcome |
-| reviewed_by | BIGINT UNSIGNED | Yes | FK → users.user_id (RESTRICT) | NULL | Reviewer |
-| reviewed_at | DATETIME | Yes | | NULL | Review time |
-| rejection_reason | VARCHAR(255) | Yes | | NULL | Staff note when rejected |
-
-### Table 16: payment_qr_codes *(retired, kept as history)*
-Replaced by PayMongo on 2026-09-26. The app no longer reads or writes this table.
-
-| Field | MySQL type | Null | Key | Default | Description |
-|---|---|---|---|---|---|
-| qr_code_id | BIGINT UNSIGNED AUTO_INCREMENT | No | PK | | QR record ID |
-| qr_image | VARCHAR(255) | No | | | Stored file path |
-| is_active | BOOLEAN (TINYINT(1)) | No | | 1 | Currently shown. The app keeps only one active at a time |
-| uploaded_by | BIGINT UNSIGNED | No | FK → users.user_id (RESTRICT) | | Uploader |
-| uploaded_at | DATETIME | No | | CURRENT_TIMESTAMP | Upload time |
+### Tables 15–16: payment_proofs, payment_qr_codes *(removed 2026-10-06)*
+Used by the old QR + screenshot payment flow, which PayMongo replaced on 2026-09-26. Both tables were dropped by migration `2026_10_06_000002` (they were empty and unused).
 
 ### Table 17: attendances
 A row exists only when staff admit the person at the door; no row = not (yet) attended / no-show. `control_number` was **removed** on 2026-09-26 (migration `2026_09_26_000001`): the official physical-ticket number is outside this system, and the booking reference is the system's own admission reference.
@@ -204,12 +194,11 @@ A row exists only when staff admit the person at the door; no row = not (yet) at
 ---
 
 ### Indexes beyond the data dictionary
-These three are plain indexes for speed. They add no constraints:
+These two are plain indexes for speed. They add no constraints:
 - `screenings.event_date`: upcoming-screening lists
 - `reservations.status`: status filters
-- `payment_proofs.status`: the pending-review queue
 
 MySQL also creates an index on every foreign-key column automatically.
 
 ### DATETIME vs TIMESTAMP
-Business times (`reservation_datetime`, `submitted_at`, `reviewed_at`, `uploaded_at`, `checked_in_at`, `payments.created_at`) use `DATETIME`, as the source dictionary specifies. MySQL stores them without time-zone conversion and they don't run out in 2038. Only the Laravel bookkeeping columns `screenings.created_at` and `screenings.updated_at` use `TIMESTAMP`, which the source dictionary also specifies.
+Business times (`reservation_datetime`, `cancelled_at`, `released_at`, `paid_at`, `checked_in_at`, `payments.created_at`) use `DATETIME`, as the source dictionary specifies. MySQL stores them without time-zone conversion (the app writes Asia/Manila time) and they don't run out in 2038. Only the Laravel bookkeeping columns `screenings.created_at` and `screenings.updated_at` use `TIMESTAMP`, which the source dictionary also specifies.

@@ -5,86 +5,85 @@
 @php
     $movie = $screening->movie;
     $past = $screening->event_date->lt(today());
-    $reserved = $screening->total_seats - $available;
+    $taken = $screening->total_seats - $available;
+    $facts = collect([
+        $movie?->runtime_minutes ? intdiv($movie->runtime_minutes, 60).'h '.($movie->runtime_minutes % 60).'m' : null,
+        $movie?->rating,
+        $movie?->release_year,
+    ])->filter();
 @endphp
 
 @section('content')
-    <a class="crumb" href="{{ route('home') }}">&larr; All screenings</a>
+    <x-crumbs :items="['Screenings' => route('home'), $screening->event_title => null]" />
 
-    <div class="detail-layout">
-        {{-- Left: the film --}}
-        <aside class="card detail-film">
-            <x-poster :screening="$screening">
-                @if ($screening->isPaid())
-                    <span class="badge badge--gold badge--plain">₱{{ number_format($screening->price, 2) }}</span>
-                @else
-                    <span class="badge badge--dark badge--plain">Free admission</span>
-                @endif
-            </x-poster>
-            <h1 style="font-size:var(--fs-2xl);margin:var(--s-4) 0 var(--s-2)">{{ $screening->event_title }}</h1>
-            @if ($movie)
-                <div class="cluster" style="margin-bottom:var(--s-3)">
-                    @if ($movie->rating)<span class="badge badge--neutral badge--plain">{{ $movie->rating }}</span>@endif
-                    @foreach ($movie->genres as $genre)<span class="badge badge--plain">{{ $genre->genre_name }}</span>@endforeach
-                </div>
-                <div class="dot-list" style="margin-bottom:var(--s-4)">
-                    @if ($movie->title !== $screening->event_title)<span>{{ $movie->title }}</span>@endif
-                    @if ($movie->release_year)<span>{{ $movie->release_year }}</span>@endif
-                    @if ($movie->runtime_minutes)<span>{{ $movie->runtime_minutes }} min</span>@endif
-                </div>
-                @if ($movie->synopsis)<p class="small">{{ $movie->synopsis }}</p>@endif
-                <dl class="kv">
-                    @if ($movie->directors->isNotEmpty())<dt>Director</dt><dd>{{ $movie->directors->pluck('full_name')->join(', ') }}</dd>@endif
-                    @if ($movie->actors->isNotEmpty())<dt>Cast</dt><dd>{{ $movie->actors->pluck('full_name')->join(', ') }}</dd>@endif
-                </dl>
-            @else
-                <p class="small muted" style="margin:0">A special programme — such as a festival block, a talk or a shorts selection — rather than a single cataloged film.</p>
+    {{-- Everything about the film first; the booking action comes after it. --}}
+    <article class="film">
+        <x-poster :screening="$screening" class="film__poster" />
+
+        <div class="film__body">
+            <span class="eyebrow">{{ $movie ? ($movie->title !== $screening->event_title ? $movie->title : 'Film') : 'Special programme' }}</span>
+            <h1 class="display film__title">{{ $screening->event_title }}</h1>
+
+            @if ($facts->isNotEmpty() || $movie?->genres->isNotEmpty())
+                <ul class="tags">
+                    @foreach ($facts as $fact)<li class="tag tag--filled">{{ $fact }}</li>@endforeach
+                    @foreach ($movie?->genres ?? [] as $genre)<li class="tag">{{ $genre->genre_name }}</li>@endforeach
+                </ul>
             @endif
-        </aside>
 
-        {{-- Right: this screening + the action --}}
-        <div class="stack">
-            <section class="card">
-                <h2 class="card__title"><span class="card__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg></span>Screening</h2>
-                <div class="screening-card__meta" style="margin-bottom:var(--s-5)">
-                    <x-date-badge :date="$screening->event_date" />
-                    <div>
-                        <div style="font-weight:700;font-size:var(--fs-lg)">{{ $screening->event_date->format('l, F j, Y') }}</div>
-                        <div class="muted">{{ \Carbon\Carbon::parse($screening->start_time)->format('g:i A') }} – {{ \Carbon\Carbon::parse($screening->end_time)->format('g:i A') }}</div>
-                    </div>
-                </div>
-                <dl class="kv" style="margin-bottom:var(--s-5)">
-                    <dt>Admission</dt><dd>{{ $screening->isPaid() ? '₱'.number_format($screening->price, 2).' per seat · paid online via PayMongo' : 'Free · reservation approved by staff' }}</dd>
-                    <dt>Seats left</dt><dd>{{ $available }} of {{ $screening->total_seats }}</dd>
+            @if ($movie?->synopsis)
+                <p class="film__synopsis">{{ $movie->synopsis }}</p>
+            @endif
+
+            @if ($movie && ($movie->directors->isNotEmpty() || $movie->actors->isNotEmpty()))
+                <dl class="credits">
+                    @if ($movie->directors->isNotEmpty())
+                        <div><dt>{{ Str::plural('Director', $movie->directors->count()) }}</dt><dd>{{ $movie->directors->pluck('full_name')->join(', ') }}</dd></div>
+                    @endif
+                    @if ($movie->actors->isNotEmpty())
+                        <div><dt>Cast</dt><dd>{{ $movie->actors->pluck('full_name')->join(', ') }}</dd></div>
+                    @endif
                 </dl>
-                <div class="progress" style="margin-bottom:var(--s-5)" aria-hidden="true"><span style="width:{{ $screening->total_seats ? min(100, $reserved / $screening->total_seats * 100) : 0 }}%"></span></div>
+            @endif
 
-                @if ($past)
-                    <div class="alert alert--info" style="margin:0"><div>This screening has already taken place.</div></div>
-                @elseif ($available > 0)
-                    <a class="btn btn--primary btn--lg btn--block" href="{{ route('bookings.create', $screening) }}">Choose seats <span class="arrow" aria-hidden="true">&rarr;</span></a>
-                @else
-                    <div class="alert alert--warning" style="margin:0"><div>This screening is fully booked.</div></div>
-                @endif
+            {{-- This screening, as a ticket, with the action --}}
+            <section class="facts-ticket" aria-label="This screening">
+                <div class="facts-ticket__stub"><x-date-stub :date="$screening->event_date" size="lg" /></div>
+                <div class="facts-ticket__body">
+                    <span class="muted small">{{ $screening->event_date->format('l, F j, Y') }}</span>
+                    <strong class="facts-ticket__time">{{ \Carbon\Carbon::parse($screening->start_time)->format('g:i A') }} – {{ \Carbon\Carbon::parse($screening->end_time)->format('g:i A') }}</strong>
+                    <span class="small">
+                        <span class="muted">Admission</span>
+                        @if ($screening->isPaid())
+                            <strong class="money">₱{{ number_format($screening->price, 0) }}</strong> <span class="muted">per seat · pay online</span>
+                        @else
+                            <strong>Free</strong> <span class="muted">· approved by staff</span>
+                        @endif
+                    </span>
+                    <span class="bar" aria-hidden="true"><span style="width:{{ $screening->total_seats ? min(100, $taken / $screening->total_seats * 100) : 0 }}%"></span></span>
+                    <span @class(['seats-left', 'seats-left--low' => $available > 0 && $available <= 10, 'seats-left--none' => $available === 0])>{{ $available }} of {{ $screening->total_seats }} seats left</span>
+                </div>
+                <div class="facts-ticket__action">
+                    @if ($past)
+                        <span class="btn btn--block is-disabled">Screening has ended</span>
+                    @elseif ($available > 0)
+                        <a class="btn btn--gold btn--lg btn--block" href="{{ route('bookings.create', $screening) }}">Choose seats <x-arrow class="arrow" /></a>
+                    @else
+                        <span class="btn btn--block is-disabled">Fully booked</span>
+                    @endif
+                </div>
             </section>
-
-            @if ($otherDates->isNotEmpty())
-                <section class="card">
-                    <h2 class="card__title" style="font-size:var(--fs-md)">Other dates for this film</h2>
-                    <div class="chips">
-                        @foreach ($otherDates as $other)
-                            <a class="chip" href="{{ route('screenings.show', $other) }}">
-                                <strong>{{ $other->event_date->format('D, M j') }}</strong>
-                                <span>{{ \Carbon\Carbon::parse($other->start_time)->format('g:i A') }} · {{ $other->isPaid() ? '₱'.number_format($other->price, 2) : 'Free' }}</span>
-                            </a>
-                        @endforeach
-                    </div>
-                </section>
-            @endif
-
-            @can('view', $screening)
-                <p class="small" style="margin:0"><a href="{{ route('staff.screenings.show', $screening) }}">Staff view of this screening &rarr;</a></p>
-            @endcan
         </div>
-    </div>
+    </article>
+
+    @if ($otherDates->isNotEmpty())
+        <section class="section-gap" aria-labelledby="other-title">
+            <h2 class="section-title" id="other-title">Other dates for this film</h2>
+            <div class="ticket-list">
+                @foreach ($otherDates as $screening)
+                    @include('public.screenings._ticket')
+                @endforeach
+            </div>
+        </section>
+    @endif
 @endsection
