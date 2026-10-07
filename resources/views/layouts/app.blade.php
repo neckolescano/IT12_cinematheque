@@ -1,38 +1,51 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'Cinematheque Davao')</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ asset('css/cinematheque.css') }}">
+    @include('partials.head')
 </head>
-<body class="@yield('body_class')">
-    @hasSection('no_chrome')
-        <div class="brand-bar">
-            <a href="{{ route('home') }}" class="brand">
-                <img src="{{ asset('images/logo.png') }}" alt="" onerror="this.style.display='none'">
-                <span>CINEMATHEQUE DAVAO</span>
-            </a>
-        </div>
-    @else
-        @include('partials.navbar')
-        <div class="pattern-line"></div>
-    @endif
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
 
-    <main>
+<header class="site-header">
+    <div class="container site-header__inner">
+        @include('partials.brand')
+
+        <button type="button" class="nav-toggle" data-toggle-class="nav-open" aria-expanded="false" aria-controls="site-nav">
+            <span></span><span></span><span></span>
+            <span class="sr-only">Menu</span>
+        </button>
+
+        <nav class="nav" id="site-nav" aria-label="Main">
+            <a href="{{ route('home') }}" @if (request()->routeIs('home', 'screenings.*', 'bookings.create', 'bookings.show')) aria-current="page" @endif>Screenings</a>
+            <a href="{{ route('bookings.lookup') }}" @if (request()->routeIs('bookings.lookup', 'bookings.ticket')) aria-current="page" @endif>Find my booking</a>
+            <a href="{{ route('about') }}" @if (request()->routeIs('about')) aria-current="page" @endif>About</a>
+            @include('partials.theme-toggle')
+        </nav>
+    </div>
+</header>
+
+@yield('hero')
+
+<main id="main" class="@yield('main_class', 'page')">
+    <div class="container">
+        @include('partials.flash')
         @yield('content')
-    </main>
+    </div>
+</main>
 
-    @hasSection('no_chrome')
-    @else
-        <div class="pattern-line"></div>
-        @include('partials.footer')
-    @endif
+<footer class="site-footer">
+    <div class="container site-footer__inner">
+        @include('partials.brand')
+        <nav class="site-footer__nav" aria-label="Footer">
+            <a href="{{ route('home') }}">Screenings</a>
+            <a href="{{ route('bookings.lookup') }}">Find my booking</a>
+            <a href="{{ route('about') }}">About</a>
+        </nav>
+        <p class="site-footer__note">An FDCP Cinematheque Centre · Palma Gil St., Davao City · &copy; {{ date('Y') }}</p>
+    </div>
+    @include('partials.skyline')
+</footer>
 
-    @stack('scripts')
+@include('partials.confirm-modal')
 </body>
 </html>

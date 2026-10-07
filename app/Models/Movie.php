@@ -2,72 +2,163 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Validation\Rule;
 
 class Movie extends Model
 {
-    protected $fillable = [
-        'title', 'synopsis', 'genre', 'language', 'duration_minutes', 'age_rating',
-        'rating', 'poster_path', 'backdrop_path', 'status', 'release_date', 'is_featured',
+    use HasFactory;
+
+    protected $primaryKey = 'movie_id';
+
+    public $timestamps = false;
+
+    protected $fillable = ['title', 'runtime_minutes', 'rating', 'release_year', 'synopsis', 'curator_note', 'trailer_url', 'poster_path'];
+
+    /** MTRCB content ratings offered in the movie form. */
+    public const RATINGS = ['G', 'PG', 'PG-13', 'R-13', 'R-16', 'R-18'];
+
+    /** Folder on the "public" disk that holds uploaded posters. */
+    public const POSTER_DIR = 'posters';
+
+    /**
+     * Fixed genre options shown as chips on the screening and movie forms, plus "Other" with
+     * a typed genre. There is no separate genre admin. (Stored in the genres table + movie_genre.)
+     */
+    public const GENRES = [
+        'Drama', 'Comedy', 'Romance', 'Action', 'Thriller', 'Horror',
+        'Documentary', 'Animation', 'Musical', 'Historical', 'Experimental', 'Short Film',
     ];
 
-    protected $casts = [
-        'release_date' => 'date',
-        'is_featured' => 'boolean',
-        'rating' => 'float',
-    ];
-
-    public function showtimes()
+    /** Validation for the film details shared by the screening form and the movie form. */
+    public static function detailRules(): array
     {
-        return $this->hasMany(Showtime::class);
+        return [
+            'runtime_minutes' => ['nullable', 'integer', 'min:1', 'max:600'],
+            'rating' => ['nullable', Rule::in(self::RATINGS)],
+            'release_year' => ['nullable', 'integer', 'min:1888', 'max:'.(now()->year + 5)],
+            'synopsis' => ['nullable', 'string', 'max:5000'],
+            'genres' => ['nullable', 'array'],
+            'genres.*' => ['string', Rule::in(self::GENRES)],
+            'genre_other_on' => ['nullable', 'boolean'],
+            'genre_other' => ['nullable', 'required_if_accepted:genre_other_on', 'string', 'max:100'],
+            'directors' => ['nullable', 'string', 'max:255'],
+            'actors' => ['nullable', 'string', 'max:1000'],
+        ];
     }
 
-    public function upcomingShowtimes()
+    /**
+     * The chosen chips plus any typed "Other" genres (comma-separated). A typed genre that is
+     * already on the list (any case) is stored under the listed name.
+     */
+    public static function genreList(array $data): array
     {
-        return $this->hasMany(Showtime::class)->where('starts_at', '>=', now());
+        $listed = collect(self::GENRES)->keyBy(fn ($g) => mb_strtolower($g));
+
+        return collect($data['genres'] ?? [])
+            ->merge(collect(self::parseNames($data['genre_other'] ?? null))->map(fn ($g) => $listed[mb_strtolower($g)] ?? mb_substr($g, 0, 50)))
+            ->unique(fn ($g) => mb_strtolower($g))->values()->all();
     }
 
-    public function scopeNowShowing($query)
+    /** Genres that aren't on the fixed list, as the "Other" text box shows them. */
+    public function customGenres(): string
     {
-        return $query->where('status', 'now_showing');
+        $listed = array_map('mb_strtolower', self::GENRES);
+
+        return $this->genres->pluck('genre_name')->reject(fn ($g) => in_array(mb_strtolower($g), $listed, true))->join(', ');
     }
 
-    public function scopeComingSoon($query)
+    /** "Lav Diaz, Brillante Mendoza" → ['Lav Diaz', 'Brillante Mendoza'] (commas, semicolons or new lines). */
+    public static function parseNames(?string $text): array
     {
-        return $query->where('status', 'coming_soon');
+        return collect(preg_split('/[,;\n]+/', (string) $text))
+            ->map(fn ($name) => trim(preg_replace('/\s+/', ' ', $name)))
+            ->filter()->unique(fn ($n) => mb_strtolower($n))->values()->all();
     }
 
-    public function getDurationLabelAttribute(): string
+    /**
+     * Save the typed credits and chosen genres. Names typed on the form are matched to
+     * existing director/actor records or created behind the scenes, so staff never manage
+     * people separately. A person no longer credited on any film is removed.
+     */
+    public function syncDetails(array $genres, ?string $directors, ?string $actors): void
     {
-        return intdiv($this->duration_minutes, 60) . 'h ' . ($this->duration_minutes % 60) . 'min';
+        $this->genres()->sync(collect($genres)->map(fn ($g) => Genre::firstOrCreate(['genre_name' => $g])->genre_id));
+        $this->directors()->sync(collect(self::parseNames($directors))->map(fn ($n) => self::person(Director::class, $n)->director_id));
+        $this->actors()->sync(collect(self::parseNames($actors))->map(fn ($n) => self::person(Actor::class, $n)->actor_id));
+
+        Director::doesntHave('movies')->delete();
+        Actor::doesntHave('movies')->delete();
     }
 
-    public function getPosterUrlAttribute(): string
+    /** "Lamberto V. Avellana" → first "Lamberto V.", last "Avellana"; a single word is the last name. */
+    private static function person(string $model, string $name): Model
     {
-        return $this->resolveImage($this->poster_path) ?? asset('images/poster-placeholder.svg');
+        $parts = explode(' ', $name);
+        $last = array_pop($parts);
+
+        // Columns are 50 characters each; first_name is required, so a one-word name keeps it empty.
+        return $model::firstOrCreate(['first_name' => mb_substr(implode(' ', $parts), 0, 50), 'last_name' => mb_substr($last, 0, 50)]);
     }
 
-    public function getBackdropUrlAttribute(): string
+    /** Credits as the comma-separated text the forms show. */
+    public function directorNames(): string
     {
-        return $this->resolveImage($this->backdrop_path) ?? $this->poster_url;
+        return $this->directors->map(fn ($d) => $d->full_name)->join(', ');
     }
 
-    /** ["Cinema 1", "Cinema 2"] built from upcoming showtimes (eager load upcomingShowtimes.cinema). */
-    public function getCinemaNamesAttribute(): array
+    public function castNames(): string
     {
-        return $this->upcomingShowtimes->pluck('cinema.name')->filter()->unique()->values()->all();
+        return $this->actors->map(fn ($a) => $a->full_name)->join(', ');
     }
 
-    private function resolveImage(?string $path): ?string
+    protected function casts(): array
     {
-        if (!$path) {
-            return null;
-        }
-        if (str_starts_with($path, 'http')) {
-            return $path;
-        }
+        return [
+            'runtime_minutes' => 'integer',
+            'release_year' => 'integer',
+        ];
+    }
 
-        return Storage::disk('public')->exists($path) ? asset('storage/' . $path) : null;
+    /** Public URL of the poster image, or null (the UI then shows the generated tile). */
+    public function posterUrl(): ?string
+    {
+        // asset() follows the host the page was opened on, unlike Storage::url() (APP_URL).
+        return $this->poster_path ? asset('storage/'.$this->poster_path) : null;
+    }
+
+    /** Player URL for the trailer modal (YouTube or Vimeo), or null: other links just open in a new tab. */
+    public function trailerEmbedUrl(): ?string
+    {
+        $url = (string) $this->trailer_url;
+
+        return match (true) {
+            (bool) preg_match('~(?:youtube\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/)|youtu\.be/)([\w-]{11})~', $url, $m) => 'https://www.youtube-nocookie.com/embed/'.$m[1],
+            (bool) preg_match('~vimeo\.com/(?:video/)?(\d+)~', $url, $m) => 'https://player.vimeo.com/video/'.$m[1],
+            default => null,
+        };
+    }
+
+    public function screenings(): HasMany
+    {
+        return $this->hasMany(Screening::class, 'movie_id', 'movie_id');
+    }
+
+    public function actors(): BelongsToMany
+    {
+        return $this->belongsToMany(Actor::class, 'movie_actor', 'movie_id', 'actor_id');
+    }
+
+    public function directors(): BelongsToMany
+    {
+        return $this->belongsToMany(Director::class, 'movie_director', 'movie_id', 'director_id');
+    }
+
+    public function genres(): BelongsToMany
+    {
+        return $this->belongsToMany(Genre::class, 'movie_genre', 'movie_id', 'genre_id');
     }
 }

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cinematheque ERD (MySQL)</title>
+<style>
+body { background: #ffffff; margin: 16px; font-family: system-ui, sans-serif; }
+#erd-mysql svg.erDiagram .divider path { stroke-opacity: 0.5; }
+#erd-mysql svg.erDiagram .row-rect-odd path,
+#erd-mysql svg.erDiagram .row-rect-odd rect,
+#erd-mysql svg.erDiagram .row-rect-even path,
+#erd-mysql svg.erDiagram .row-rect-even rect { stroke: none !important; }
+</style>
+</head>
+<body>
+<h1>Cinematheque Centre Davao: ERD (MySQL data types)</h1>
+<p>Same entities and relationships as the original ERD, with MySQL column types. Mermaid can't show spaces in a type, so <code>BIGINT_UNSIGNED</code> means <code>BIGINT UNSIGNED</code>. <code>BOOLEAN</code> is stored as <code>TINYINT(1)</code>.</p>
+<p>Four relationship lines differ from the original ERD so that they match the written business rules in <code>implementation.md</code>: Movie–Screening is optional on the movie side (rule 2), a Reservation has <em>one or more</em> seats (rule 7), a Payment has <em>one or more</em> proofs (rule 12), and a proof has <em>zero or one</em> reviewer (rule 14). The tables and keys are unchanged.</p>
+<p><strong>2026-09-26 revision:</strong> <code>attendances.control_number</code> removed; PayMongo fields added to <code>payments</code>. <code>payment_proofs</code> and <code>payment_qr_codes</code> retired.</p>
+<p><strong>2026-10-06 revision:</strong> cancelled bookings release their seats (<code>reservation_seats.released_at</code>, generated <code>held_seat_id</code>, <code>UNIQUE(screening_id, held_seat_id)</code>); unpaid bookings expire after 15 minutes (<code>reservations.cancellation_reason</code>, <code>cancelled_at</code>); <code>movies.poster_path</code> added; <code>payment_proofs</code> and <code>payment_qr_codes</code> dropped.</p>
+<p><strong>2026-10-07 revision:</strong> <code>reservation_attendees.pwd_id_no</code> added (optional PWD ID number; <code>pwd_indicator</code> is set when it is filled). Actors, directors and genres no longer have separate admin pages: they are entered on the screening/film form (genres from a fixed list). The tables and relationships are unchanged.</p>
+<div id="erd-mysql"></div>
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+mermaid.initialize({ startOnLoad: false, theme: 'base', themeVariables: { fontSize: '13px' } });
+const src = `erDiagram
+  USERS {
+    BIGINT_UNSIGNED user_id PK "AUTO_INCREMENT"
+    VARCHAR(50) first_name
+    VARCHAR(50) middle_name "NULL"
+    VARCHAR(50) last_name
+    VARCHAR(100) email UK
+    VARCHAR(255) password
+    ENUM position "AVT, PDO; NULL"
+    BOOLEAN is_active "DEFAULT 1"
+  }
+  MOVIES {
+    BIGINT_UNSIGNED movie_id PK "AUTO_INCREMENT"
+    VARCHAR(150) title
+    SMALLINT_UNSIGNED runtime_minutes "NULL"
+    VARCHAR(10) rating "NULL"
+    SMALLINT_UNSIGNED release_year "NULL"
+    TEXT synopsis "NULL"
+    VARCHAR(255) poster_path "NULL"
+  }
+  ACTORS {
+    BIGINT_UNSIGNED actor_id PK "AUTO_INCREMENT"
+    VARCHAR(50) first_name
+    VARCHAR(50) middle_name "NULL"
+    VARCHAR(50) last_name
+  }
+  MOVIE_ACTOR {
+    BIGINT_UNSIGNED movie_id PK,FK
+    BIGINT_UNSIGNED actor_id PK,FK
+  }
+  DIRECTORS {
+    BIGINT_UNSIGNED director_id PK "AUTO_INCREMENT"
+    VARCHAR(50) first_name
+    VARCHAR(50) middle_name "NULL"
+    VARCHAR(50) last_name
+  }
+  MOVIE_DIRECTOR {
+    BIGINT_UNSIGNED movie_id PK,FK
+    BIGINT_UNSIGNED director_id PK,FK
+  }
+  GENRES {
+    BIGINT_UNSIGNED genre_id PK "AUTO_INCREMENT"
+    VARCHAR(50) genre_name UK
+  }
+  MOVIE_GENRE {
+    BIGINT_UNSIGNED movie_id PK,FK
+    BIGINT_UNSIGNED genre_id PK,FK
+  }
+  SEATS {
+    BIGINT_UNSIGNED seat_id PK "AUTO_INCREMENT"
+    VARCHAR(10) seat_label UK
+    VARCHAR(30) section "NULL"
+  }
+  SCREENINGS {
+    BIGINT_UNSIGNED screening_id PK "AUTO_INCREMENT"
+    VARCHAR(150) event_title
+    BIGINT_UNSIGNED movie_id FK "NULL"
+    DATE event_date
+    TIME start_time
+    TIME end_time
+    ENUM type "free, paid; DEFAULT free"
+    DECIMAL price "(8,2) NULL"
+    INT_UNSIGNED total_seats "DEFAULT 100"
+    BIGINT_UNSIGNED created_by FK
+    TIMESTAMP created_at "NULL"
+    TIMESTAMP updated_at "NULL"
+  }
+  RESERVATIONS {
+    BIGINT_UNSIGNED reservation_id PK "AUTO_INCREMENT"
+    BIGINT_UNSIGNED screening_id FK
+    VARCHAR(20) booking_reference UK
+    ENUM status "pending, confirmed, cancelled"
+    ENUM cancellation_reason "NULL: staff, payment_expired"
+    DATETIME cancelled_at "NULL"
+    DATETIME reservation_datetime "DEFAULT CURRENT_TIMESTAMP"
+    VARCHAR(50) lead_first_name
+    VARCHAR(50) lead_middle_name "NULL"
+    VARCHAR(50) lead_last_name
+    VARCHAR(20) lead_contact_no
+    VARCHAR(100) lead_email "NULL"
+  }
+  RESERVATION_SEATS {
+    BIGINT_UNSIGNED reservation_seat_id PK "AUTO_INCREMENT"
+    BIGINT_UNSIGNED reservation_id FK
+    BIGINT_UNSIGNED screening_id FK "UNIQUE with held_seat_id"
+    BIGINT_UNSIGNED seat_id FK
+    DATETIME released_at "NULL: set on cancel"
+    BIGINT_UNSIGNED held_seat_id "GENERATED: seat_id while held"
+  }
+  RESERVATION_ATTENDEES {
+    BIGINT_UNSIGNED reservation_attendee_id PK "AUTO_INCREMENT"
+    BIGINT_UNSIGNED reservation_seat_id FK,UK
+    BOOLEAN is_lead_reserver "DEFAULT 0"
+    VARCHAR(50) first_name
+    VARCHAR(50) middle_name "NULL"
+    VARCHAR(50) last_name
+    TINYINT_UNSIGNED age "NULL"
+    ENUM sex "M, F; NULL"
+    VARCHAR(150) company_school "NULL"
+    VARCHAR(20) contact_no "NULL"
+    VARCHAR(100) email "NULL"
+    VARCHAR(30) senior_card_no "NULL"
+    VARCHAR(30) pwd_id_no "NULL"
+    BOOLEAN pwd_indicator "DEFAULT 0"
+  }
+  PAYMENTS {
+    BIGINT_UNSIGNED payment_id PK "AUTO_INCREMENT"
+    BIGINT_UNSIGNED reservation_id FK,UK
+    DECIMAL amount "(8,2)"
+    VARCHAR(30) payment_channel "NULL"
+    ENUM status "pending, verified, rejected"
+    VARCHAR(64) provider_session_id UK "PayMongo session ID; NULL"
+    VARCHAR(64) provider_payment_id "PayMongo payment ID; NULL"
+    DATETIME paid_at "NULL"
+    DATETIME created_at "DEFAULT CURRENT_TIMESTAMP"
+  }
+  ATTENDANCES {
+    BIGINT_UNSIGNED attendance_id PK "AUTO_INCREMENT"
+    BIGINT_UNSIGNED reservation_seat_id FK,UK
+    TEXT remarks "NULL"
+    DATETIME checked_in_at
+    BIGINT_UNSIGNED checked_in_by FK
+  }
+
+  MOVIES ||--o{ MOVIE_ACTOR : cast
+  ACTORS ||--o{ MOVIE_ACTOR : appears_in
+  MOVIES ||--o{ MOVIE_DIRECTOR : credited
+  DIRECTORS ||--o{ MOVIE_DIRECTOR : directs
+  MOVIES ||--o{ MOVIE_GENRE : classified
+  GENRES ||--o{ MOVIE_GENRE : applies_to
+  MOVIES |o--o{ SCREENINGS : built_around
+  USERS ||--o{ SCREENINGS : creates
+  SCREENINGS ||--o{ RESERVATIONS : has
+  RESERVATIONS ||--|{ RESERVATION_SEATS : includes
+  SEATS ||--o{ RESERVATION_SEATS : used_in
+  SCREENINGS ||--o{ RESERVATION_SEATS : locks
+  RESERVATION_SEATS ||--|| RESERVATION_ATTENDEES : declared_as
+  RESERVATIONS ||--o| PAYMENTS : may_have
+  RESERVATION_SEATS ||--o| ATTENDANCES : admission_for
+  USERS ||--o{ ATTENDANCES : checks_in`;
+const { svg } = await mermaid.render('erd-mysql-svg', src);
+document.getElementById('erd-mysql').innerHTML = svg;
+</script>
+</body>
+</html>

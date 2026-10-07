@@ -2,48 +2,58 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
+/**
+ * Staff account (AVT or PDO). Being a row here *is* being staff.
+ * `position` is descriptive only and never gates access.
+ */
 class User extends Authenticatable
 {
-    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
+    public const POSITIONS = ['AVT', 'PDO'];
+
+    protected $primaryKey = 'user_id';
+
+    public $timestamps = false;
+
+    /** The users table has no remember_token column, so "remember me" is disabled. */
+    protected $rememberTokenName = '';
+
     protected $fillable = [
-        'name',
-        'email',
-        'password',
+        'first_name', 'middle_name', 'last_name', 'email', 'password', 'position', 'is_active',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
-    protected $hidden = [
-        'password',
-        'remember_token',
+    protected $hidden = ['password'];
+
+    protected $attributes = [
+        'is_active' => true,
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_active' => 'boolean',
         ];
+    }
+
+    public function getFullNameAttribute(): string
+    {
+        return trim(implode(' ', array_filter([$this->first_name, $this->middle_name, $this->last_name])));
+    }
+
+    public function screenings(): HasMany
+    {
+        return $this->hasMany(Screening::class, 'created_by', 'user_id');
+    }
+
+    public function checkIns(): HasMany
+    {
+        return $this->hasMany(Attendance::class, 'checked_in_by', 'user_id');
     }
 }

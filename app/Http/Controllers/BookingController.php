@@ -2,207 +2,281 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Booking;
-use App\Models\BookingSeat;
-use App\Models\Movie;
-use App\Models\Showtime;
-use Illuminate\Database\QueryException;
+use App\Http\Requests\StoreReservationRequest;
+use App\Models\Reservation;
+use App\Models\Screening;
+use App\Models\Seat;
+use App\Services\PayMongo\PayMongoException;
+use App\Services\ReservationMailer;
+use App\Services\ReservationPayments;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\View\View;
 
+/**
+ * Public reservation flow: pick seats -> declare one attendee per seat -> submit.
+ * Every new reservation starts "pending":
+ *   paid screenings  -> PayMongo checkout -> confirmed only when PayMongo reports it paid
+ *   free screenings  -> confirmed when staff approve it
+ */
 class BookingController extends Controller
 {
-    /* ---------- Step 2: date & time ---------- */
-    public function showtimes(Request $request, Movie $movie)
+    /**
+     * Step 1 (no ?seats[]): seat picker.
+     * Step 2 (?seats[]=..): lead contact + one attendee fieldset per selected seat.
+     */
+    public function create(Request $request, Screening $screening): View|RedirectResponse
     {
-        abort_unless($movie->status === 'now_showing', 404);
-        Booking::releaseExpired();
-
-        $showtimes = $movie->showtimes()
-            ->where('starts_at', '>=', now())
-            ->with('cinema')
-            ->withCount('bookingSeats')
-            ->orderBy('starts_at')
-            ->get();
-
-        $byDate = $showtimes->groupBy(fn ($s) => $s->starts_at->toDateString());
-        $selectedDate = $request->query('date');
-        if (!$selectedDate || !$byDate->has($selectedDate)) {
-            $selectedDate = $byDate->keys()->first();
+        if ($screening->event_date->lt(today())) {
+            return redirect()->route('screenings.show', $screening)
+                ->withErrors(['seat_ids' => 'This screening has already taken place.']);
         }
 
-        return view('booking.showtimes', [
-            'movie' => $movie,
-            'dates' => $byDate->keys(),
-            'selectedDate' => $selectedDate,
-            'times' => $byDate->get($selectedDate, collect()),
+        $takenSeatIds = $screening->takenSeatIds();
+        $seats = Seat::orderBy('section')->orderBy('seat_id')->get();
+
+        $selected = collect();
+        if ($request->filled('seats')) {
+            $request->validate([
+                'seats' => ['array', 'min:1', 'max:'.StoreReservationRequest::MAX_SEATS_PER_RESERVATION],
+                'seats.*' => ['integer', 'distinct'],
+            ]);
+
+            // Kept in the order chosen: the first seat is the primary booker.
+            $chosen = array_map('intval', $request->input('seats'));
+            $selected = $seats->whereIn('seat_id', $chosen)
+                ->whereNotIn('seat_id', $takenSeatIds)
+                ->sortBy(fn ($seat) => array_search($seat->seat_id, $chosen, true))
+                ->values();
+
+            if ($selected->count() !== count($request->input('seats'))) {
+                return redirect()->route('bookings.create', $screening)
+                    ->withErrors(['seat_ids' => 'Some selected seats are no longer available.']);
+            }
+        }
+
+        return view('public.bookings.create', [
+            'screening' => $screening,
+            'seats' => $seats,
+            'takenSeatIds' => $takenSeatIds,
+            'selected' => $selected,
+            'available' => $screening->availableSeatCount(),
         ]);
     }
 
-    /* ---------- Step 3: seats ---------- */
-    public function seats(Showtime $showtime)
+    public function store(StoreReservationRequest $request, Screening $screening, ReservationMailer $mailer): RedirectResponse
     {
-        abort_if($showtime->starts_at->isPast(), 404);
-        Booking::releaseExpired();
-        $showtime->load('movie', 'cinema');
-
-        $seats = $showtime->bookingSeats()->with('booking:id,status')->get();
-
-        return view('booking.seats', [
-            'showtime' => $showtime,
-            'taken' => $seats->filter(fn ($s) => $s->booking->status === 'confirmed')->pluck('seat_label')->all(),
-            'locked' => $seats->filter(fn ($s) => $s->booking->status === 'held')->pluck('seat_label')->all(),
-        ]);
-    }
-
-    /** Lock the chosen seats and create a "held" booking. */
-    public function hold(Request $request, Showtime $showtime)
-    {
-        abort_if($showtime->starts_at->isPast(), 404);
-
-        $max = config('cinema.max_tickets');
-        $data = $request->validate([
-            'seats' => ['required', 'array', 'min:1', "max:$max"],
-            'seats.*' => ['string', 'distinct'],
-        ]);
-
-        $showtime->load('cinema');
-        $seats = array_map('strtoupper', $data['seats']);
-
-        foreach ($seats as $label) {
-            abort_unless($showtime->cinema->isValidSeat($label), 422);
-        }
-
-        Booking::releaseExpired();
+        $data = $request->validated();
+        $seatIds = array_map('intval', $data['seat_ids']);
+        $leadSeatId = isset($data['lead_seat_id']) ? (int) $data['lead_seat_id'] : null;
 
         try {
-            $booking = DB::transaction(function () use ($showtime, $seats) {
-                $booking = Booking::create([
-                    'reference' => Booking::newReference(),
-                    'showtime_id' => $showtime->id,
-                    'status' => 'held',
-                    'payment_status' => 'free',
-                    'total_amount' => count($seats) * $showtime->cinema->ticket_price,
-                    'expires_at' => now()->addMinutes(config('cinema.hold_minutes')),
+            $reservation = DB::transaction(function () use ($screening, $data, $seatIds, $leadSeatId) {
+                // Serialise concurrent bookings for the same screening (MySQL/Postgres).
+                $screening = Screening::whereKey($screening->getKey())->lockForUpdate()->firstOrFail();
+
+                if (count($seatIds) > $screening->availableSeatCount()) {
+                    return null;
+                }
+
+                $reservation = Reservation::create([
+                    'screening_id' => $screening->screening_id,
+                    'booking_reference' => Reservation::generateBookingReference(),
+                    // Pending until PayMongo confirms payment (paid) or staff approve it (free).
+                    'status' => 'pending',
+                    'reservation_datetime' => now(),
+                    'lead_first_name' => $data['lead_first_name'],
+                    'lead_middle_name' => $data['lead_middle_name'] ?? null,
+                    'lead_last_name' => $data['lead_last_name'],
+                    'lead_contact_no' => $data['lead_contact_no'],
+                    'lead_email' => $data['lead_email'],
                 ]);
 
-                foreach ($seats as $label) {
-                    BookingSeat::create([
-                        'booking_id' => $booking->id,
-                        'showtime_id' => $showtime->id,
-                        'seat_label' => $label,
+                foreach ($seatIds as $seatId) {
+                    $reservationSeat = $reservation->reservationSeats()->create([
+                        'screening_id' => $screening->screening_id,
+                        'seat_id' => $seatId,
+                    ]);
+
+                    $attendee = $data['attendees'][$seatId];
+                    $reservationSeat->attendee()->create([
+                        'is_lead_reserver' => $leadSeatId === $seatId,
+                        'first_name' => $attendee['first_name'],
+                        'middle_name' => $attendee['middle_name'] ?? null,
+                        'last_name' => $attendee['last_name'],
+                        'age' => $attendee['age'] ?? null,
+                        'sex' => $attendee['sex'] ?? null,
+                        'company_school' => $attendee['company_school'] ?? null,
+                        'contact_no' => $attendee['contact_no'] ?? null,
+                        'email' => $attendee['email'] ?? null,
+                        'senior_card_no' => $attendee['senior_card_no'] ?? null,
+                        'pwd_id_no' => $attendee['pwd_id_no'] ?? null,
+                        'pwd_indicator' => filled($attendee['pwd_id_no'] ?? null),
                     ]);
                 }
 
-                return $booking;
+                if ($screening->isPaid()) {
+                    // Business rule 11: payment starts pending; it is never assumed verified.
+                    $reservation->payment()->create([
+                        'amount' => round((float) $screening->price * count($seatIds), 2),
+                        'status' => 'pending',
+                    ]);
+                }
+
+                return $reservation;
             });
-        } catch (QueryException $e) {
-            // 23000 = MySQL/SQLite unique violation, 23505 = PostgreSQL
-            if (!in_array((string) $e->getCode(), ['23000', '23505'], true)) {
-                throw $e;
-            }
-
-            return redirect()->route('booking.seats', $showtime)
-                ->withErrors(['seats' => 'One or more of those seats were just taken. Please pick different seats.']);
+        } catch (UniqueConstraintViolationException) {
+            // UNIQUE(screening_id, seat_id) caught a race with another booking.
+            return back()->withInput()
+                ->withErrors(['seat_ids' => 'One or more seats were just reserved by someone else. Please choose again.']);
         }
 
-        return redirect()->route('booking.checkout', $booking);
+        if (! $reservation) {
+            return back()->withInput()->withErrors(['seat_ids' => 'Not enough seats left for this screening.']);
+        }
+
+        // After the transaction: an email problem must never undo the booking.
+        $emailed = $mailer->pending($reservation);
+        $note = $emailed ? ' A copy was sent to '.$reservation->lead_email.'.'
+            : ' We could not send the confirmation email, so please save your booking reference.';
+
+        if ($screening->isPaid()) {
+            // Straight on to payment: one less click for the customer.
+            return redirect()->route('bookings.pay', $reservation)
+                ->with('status', 'Reservation '.$reservation->booking_reference.' is held. Complete payment to receive your e-ticket.'.$note);
+        }
+
+        return redirect()->route('bookings.show', $reservation)
+            ->with('booked', true)->with('status', 'Reservation '.$reservation->booking_reference.' received. Your e-ticket will be emailed once staff approve it.'.$note);
     }
 
-    /* ---------- Step 4: details (+ QR if the cinema charges) ---------- */
-    public function checkout(Booking $booking)
+    /** Send the customer to PayMongo's hosted checkout (reusing an open session). */
+    public function pay(Reservation $reservation, ReservationPayments $payments): RedirectResponse
     {
-        Booking::releaseExpired();
-        $booking->refresh();
+        // Keep the "reservation held" message from store() if we end up on the booking page.
+        session()->reflash();
 
-        if ($booking->status === 'confirmed') {
-            return redirect()->route('booking.show', $booking);
-        }
-        if ($booking->status !== 'held') {
-            return $this->holdExpired($booking);
+        if (! $reservation->payment) {
+            return redirect()->route('bookings.show', $reservation);
         }
 
-        $booking->load('showtime.movie', 'showtime.cinema', 'seats');
+        if (! $payments->isConfigured()) {
+            return redirect()->route('bookings.show', $reservation)
+                ->withErrors(['payment' => 'Online payment is not available right now. Please try again later or contact Cinematheque Centre Davao.']);
+        }
 
-        return view('booking.checkout', ['booking' => $booking]);
+        try {
+            $url = $payments->checkoutUrl($reservation);
+        } catch (PayMongoException $e) {
+            report($e);
+
+            return redirect()->route('bookings.show', $reservation)
+                ->withErrors(['payment' => 'We could not open the payment page. Please try again in a moment.']);
+        }
+
+        return $url ? redirect()->away($url) : redirect()->route('bookings.show', $reservation);
     }
 
-    public function confirm(Request $request, Booking $booking)
+    /**
+     * PayMongo's success_url. The redirect itself proves nothing, so we ask PayMongo's API
+     * for the session's real status before telling the customer anything.
+     */
+    public function paymentReturn(Reservation $reservation, ReservationPayments $payments): RedirectResponse
     {
-        Booking::releaseExpired();
-        $booking->refresh();
-
-        if ($booking->status !== 'held') {
-            return $this->holdExpired($booking);
+        $payment = $reservation->payment;
+        if (! $payment) {
+            return redirect()->route('bookings.show', $reservation);
         }
 
-        $charges = $booking->showtime->cinema->chargesCustomers();
+        try {
+            $paid = $payments->sync($payment);
+        } catch (PayMongoException $e) {
+            report($e);
+            $paid = false;
+        }
+
+        $back = redirect()->route('bookings.show', $reservation);
+
+        if (! $paid) {
+            return $back->with('warning', 'We have not received confirmation from PayMongo yet. If you completed the payment, it can take a minute. Use "Check payment status" below.');
+        }
+
+        // Paid, but after the booking expired or was cancelled: it stays cancelled.
+        return $reservation->refresh()->status === 'confirmed'
+            ? $back->with('booked', true)->with('status', 'Payment received. Your reservation is confirmed and your e-ticket has been emailed to '.$reservation->lead_email.'.')
+            : $back->with('warning', 'We received your payment, but this booking was no longer active, so it could not be confirmed. Please contact Cinematheque Centre Davao about a refund and quote '.$reservation->booking_reference.'.');
+    }
+
+    /**
+     * Find my booking: by booking reference, OR by the booker's email (upcoming bookings only).
+     * The result is the ticket itself (bookings.ticket), not the booking-flow page.
+     */
+    public function lookup(Request $request): View|RedirectResponse
+    {
+        if (! $request->hasAny(['reference', 'email'])) {
+            return view('public.bookings.lookup');
+        }
 
         $data = $request->validate([
-            'customer_name' => ['required', 'string', 'max:100'],
-            'customer_email' => ['required', 'email', 'max:150'],
-            'customer_phone' => ['nullable', 'string', 'max:30'],
-            'paid' => $charges ? ['accepted'] : ['nullable'],
-        ], [
-            'paid.accepted' => 'Please scan the QR code, pay, then tick the box to confirm.',
-        ]);
+            'reference' => ['nullable', 'string', 'max:20', 'required_without:email'],
+            'email' => ['nullable', 'email', 'max:100', 'required_without:reference'],
+        ], ['reference.required_without' => 'Enter your booking reference or your email.'], ['reference' => 'booking reference']);
 
-        $booking->update([
-            'customer_name' => $data['customer_name'],
-            'customer_email' => $data['customer_email'],
-            'customer_phone' => $data['customer_phone'] ?? null,
-            'status' => 'confirmed',
-            'payment_status' => $charges ? 'unverified' : 'free',
-            'expires_at' => null,
-        ]);
+        if (filled($data['reference'] ?? null)) {
+            $reservation = Reservation::where('booking_reference', strtoupper(trim($data['reference'])))->first();
 
-        return redirect()->route('booking.show', $booking);
-    }
-
-    /** "Back" (back=1) returns to seat selection, "Cancel Booking" returns to the movie list. */
-    public function cancel(Request $request, Booking $booking)
-    {
-        if ($booking->status === 'held') {
-            BookingSeat::where('booking_id', $booking->id)->delete();
-            $booking->update(['status' => 'cancelled', 'expires_at' => null]);
+            return $reservation
+                ? redirect()->route('bookings.ticket', $reservation)
+                : back()->withInput()->withErrors(['reference' => 'No booking matches that reference. Check it and try again.']);
         }
 
-        return $request->boolean('back')
-            ? redirect()->route('booking.seats', $booking->showtime_id)
-            : redirect()->route('movies.index')->with('status', 'Booking cancelled.');
-    }
+        // By email: only bookings for screenings that haven't happened yet.
+        $matches = Reservation::with('screening')
+            ->whereRaw('LOWER(lead_email) = ?', [Str::lower(trim($data['email']))])
+            ->whereHas('screening', fn ($q) => $q->whereDate('event_date', '>=', today()))
+            ->get()
+            ->sortBy(fn (Reservation $r) => $r->screening->event_date->toDateString().' '.$r->screening->start_time)
+            ->values();
 
-    /* ---------- Step 5: confirmation ---------- */
-    public function show(Booking $booking)
-    {
-        if ($booking->status !== 'confirmed') {
-            return redirect()->route('movies.index');
+        if ($matches->isEmpty()) {
+            return back()->withInput()->withErrors(['email' => 'No upcoming bookings for that email.']);
         }
 
-        $booking->load('showtime.movie', 'showtime.cinema', 'seats');
-        $movie = $booking->showtime->movie;
+        if ($matches->count() === 1) {
+            return redirect()->route('bookings.ticket', $matches->first());
+        }
 
-        $similar = Movie::nowShowing()
-            ->where('id', '!=', $movie->id)
-            ->orderByRaw('genre = ? DESC', [$movie->genre])
-            ->orderByDesc('rating')
-            ->limit(4)
-            ->get();
-
-        return view('booking.confirmation', compact('booking', 'movie', 'similar'));
+        return view('public.bookings.lookup', ['results' => $matches]);
     }
 
-    public function tickets(Booking $booking)
+    /** The ticket on its own — what "Find my booking" opens. */
+    public function ticket(Reservation $reservation): View
     {
-        abort_unless($booking->status === 'confirmed', 404);
-        $booking->load('showtime.movie', 'showtime.cinema', 'seats');
+        $reservation->load('screening.movie', 'reservationSeats.seat', 'reservationSeats.attendee', 'payment');
 
-        return view('booking.tickets', ['booking' => $booking]);
+        return view('public.bookings.ticket', [
+            'reservation' => $reservation,
+            'payment' => $reservation->payment,
+            'canPay' => $reservation->payment && ! $reservation->payment->isPaid() && $reservation->status === 'pending',
+        ]);
     }
 
-    private function holdExpired(Booking $booking)
+    /** Booking summary + payment status / "Pay with PayMongo". */
+    public function show(Request $request, Reservation $reservation, ReservationPayments $payments): View
     {
-        return redirect()->route('booking.seats', $booking->showtime_id)
-            ->withErrors(['seats' => 'Your seat hold expired. Please choose your seats again.']);
+        $reservation->load('screening.movie', 'reservationSeats.seat', 'reservationSeats.attendee', 'payment');
+        $payment = $reservation->payment;
+
+        return view('public.bookings.show', [
+            'reservation' => $reservation,
+            'payment' => $payment,
+            'canPay' => $payment && ! $payment->isPaid() && $reservation->status === 'pending',
+            'payBy' => $reservation->status === 'pending' ? $reservation->paymentDeadline() : null,
+            'paymentsEnabled' => $payments->isConfigured(),
+            'paymentCancelled' => $request->query('payment') === 'cancelled',
+        ]);
     }
 }

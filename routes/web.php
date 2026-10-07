@@ -1,54 +1,92 @@
 <?php
 
-use App\Http\Controllers\Admin\AdminAuthController;
+use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\BookingController;
-use App\Http\Controllers\HomeController;
-use App\Http\Controllers\MovieController;
-use App\Http\Controllers\TicketLookupController;
+use App\Http\Controllers\PayMongoWebhookController;
+use App\Http\Controllers\PublicScreeningController;
+use App\Http\Controllers\Staff;
+use App\Http\Middleware\EnsureStaffIsActive;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 
-/*
-|--------------------------------------------------------------------------
-| Customer side - no login needed
-|--------------------------------------------------------------------------
-*/
-Route::get('/', [HomeController::class, 'index'])->name('home');
-Route::get('/movies', [MovieController::class, 'index'])->name('movies.index');
-
-// Step 2: date & time
-Route::get('/movies/{movie}/book', [BookingController::class, 'showtimes'])->name('booking.showtimes');
-
-// Step 3: seats
-Route::get('/showtimes/{showtime}/seats', [BookingController::class, 'seats'])->name('booking.seats');
-Route::post('/showtimes/{showtime}/seats', [BookingController::class, 'hold'])->name('booking.hold');
-
-// Step 4: details (+ QR only when the cinema charges)
-Route::get('/bookings/{booking}/checkout', [BookingController::class, 'checkout'])->name('booking.checkout');
-Route::post('/bookings/{booking}/confirm', [BookingController::class, 'confirm'])->name('booking.confirm');
-Route::delete('/bookings/{booking}', [BookingController::class, 'cancel'])->name('booking.cancel');
-
-// Step 5: confirmation + printable tickets
-Route::get('/bookings/{booking}', [BookingController::class, 'show'])->name('booking.show');
-Route::get('/bookings/{booking}/tickets', [BookingController::class, 'tickets'])->name('booking.tickets');
-
-// "Tickets" in the navbar: find a booking with reference + email
-Route::get('/tickets', [TicketLookupController::class, 'form'])->name('tickets.lookup');
-Route::post('/tickets', [TicketLookupController::class, 'find'])->name('tickets.find');
+Route::redirect('/', '/cinemathequecentredavao');
 
 /*
 |--------------------------------------------------------------------------
-| Admin - the only place with a login
+| Customer site — /cinemathequecentredavao (moviegoers never log in)
 |--------------------------------------------------------------------------
-| The login route is named "login" on purpose: Laravel's auth middleware
-| redirects guests to route('login') by default.
 */
-Route::prefix('admin')->group(function () {
-    Route::get('/login', [AdminAuthController::class, 'showLogin'])->name('login');
-    Route::post('/login', [AdminAuthController::class, 'login'])->name('admin.login.submit');
+Route::prefix('cinemathequecentredavao')->group(function () {
+    Route::get('/', [PublicScreeningController::class, 'index'])->name('home');
+    Route::get('screenings/{screening}', [PublicScreeningController::class, 'show'])->name('screenings.show');
+    Route::view('about', 'public.about')->name('about');
 
-    Route::middleware('auth')->group(function () {
-        Route::post('/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
-        Route::get('/', fn () => view('admin.dashboard'))->name('admin.dashboard');
-        // TODO: movies, cinemas (with QR upload), showtimes, bookings CRUD
+    Route::get('screenings/{screening}/reserve', [BookingController::class, 'create'])->name('bookings.create');
+    Route::post('screenings/{screening}/reserve', [BookingController::class, 'store'])
+        ->middleware('throttle:10,1')->name('bookings.store');
+
+    Route::get('booking', [BookingController::class, 'lookup'])->name('bookings.lookup');
+    Route::get('booking/{reservation:booking_reference}', [BookingController::class, 'show'])->name('bookings.show');
+    Route::get('booking/{reservation:booking_reference}/ticket', [BookingController::class, 'ticket'])->name('bookings.ticket');
+
+    // PayMongo hosted checkout: start (or resume) payment, and the page PayMongo returns to.
+    Route::get('booking/{reservation:booking_reference}/pay', [BookingController::class, 'pay'])
+        ->middleware('throttle:20,1')->name('bookings.pay');
+    Route::get('booking/{reservation:booking_reference}/payment/return', [BookingController::class, 'paymentReturn'])
+        ->middleware('throttle:20,1')->name('bookings.payment.return');
+});
+
+/*
+| PayMongo → server webhook. No CSRF token (PayMongo can't send one); the request is
+| authenticated by its Paymongo-Signature header instead.
+*/
+Route::post('webhooks/paymongo', PayMongoWebhookController::class)
+    ->withoutMiddleware(ValidateCsrfToken::class)
+    ->middleware('throttle:60,1')
+    ->name('webhooks.paymongo');
+
+/*
+|--------------------------------------------------------------------------
+| Staff area — /ccdadmin. Not linked from the customer site, but that is NOT the
+| protection: every page below requires a logged-in, active staff account.
+| AVT and PDO pass identically; policies only add record-state rules.
+|--------------------------------------------------------------------------
+*/
+Route::prefix('ccdadmin')->group(function () {
+    Route::middleware('guest')->group(function () {
+        Route::get('login', [LoginController::class, 'create'])->name('login');
+        Route::post('login', [LoginController::class, 'store'])->middleware('throttle:5,1');
     });
+    Route::post('logout', [LoginController::class, 'destroy'])->middleware('auth')->name('logout');
+
+    Route::middleware(['auth', EnsureStaffIsActive::class])
+        ->name('staff.')
+        ->group(function () {
+            Route::get('/', Staff\DashboardController::class)->name('dashboard');
+            Route::get('search', Staff\SearchController::class)->name('search');
+
+            // Screenings workspace (details + attendee checklist + admission on one page)
+            Route::resource('screenings', Staff\ScreeningController::class);
+            Route::post('screenings/{screening}/approve-pending', [Staff\ScreeningController::class, 'approvePending'])->name('screenings.approve-pending');
+
+            Route::post('reservation-seats/{reservationSeat}/attendance', [Staff\AttendanceController::class, 'store'])->name('attendances.store');
+            Route::post('reservations/{reservation}/admit', [Staff\AttendanceController::class, 'storeGroup'])->name('reservations.admit');
+            Route::patch('attendances/{attendance}', [Staff\AttendanceController::class, 'update'])->name('attendances.update');
+            Route::delete('attendances/{attendance}', [Staff\AttendanceController::class, 'destroy'])->name('attendances.destroy');
+
+            // Reservations across all screenings
+            Route::get('reservations', [Staff\ReservationController::class, 'index'])->name('reservations.index');
+            Route::get('reservations/{reservation}', [Staff\ReservationController::class, 'show'])->name('reservations.show');
+            Route::patch('reservations/{reservation}/confirm', [Staff\ReservationController::class, 'confirm'])->name('reservations.confirm');
+            Route::patch('reservations/{reservation}/cancel', [Staff\ReservationController::class, 'cancel'])->name('reservations.cancel');
+            Route::post('reservations/{reservation}/resend', [Staff\ReservationController::class, 'resend'])->name('reservations.resend');
+            Route::post('reservations/{reservation}/sync-payment', [Staff\ReservationController::class, 'syncPayment'])->name('reservations.sync-payment');
+
+            Route::get('reports', [Staff\ReportController::class, 'index'])->name('reports.index');
+            Route::get('reports/export', [Staff\ReportController::class, 'export'])->name('reports.export');
+
+            // Settings (directors, cast and genres are typed on the screening/movie forms; no separate admin)
+            Route::resource('movies', Staff\MovieController::class)->except('show');
+            Route::resource('users', Staff\UserController::class)->except('show', 'destroy');
+        });
 });
