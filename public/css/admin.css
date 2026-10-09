@@ -1,54 +1,63 @@
 /* =========================================================================
    Cinematheque Centre Davao — Staff (/ccdadmin)
-   An internal working system. Geist (Geist Mono for booking references and seat labels);
-   Poppins and Oswald belong to the customer site.
-   Visual rules: neutral grays; Cinematheque purple only for primary actions; conventional
+   An internal working system in the customer site's colourway (FDCP yellow / black / white), set in
+   Geist (Geist Mono for booking references and seat labels; Oswald only for the brand lettering).
+   Visual rules: warm neutrals; gold for primary actions and the active place; conventional
    semantic colours (green success, amber warning, red danger); small radii (2–6px); borders
    instead of shadows; tables for records, with clicking a row opening its record and the
    Actions column holding only other actions.
    ========================================================================= */
 
 :root {
+    /* Geist for all staff text (Geist Mono for booking references and seat labels); Oswald only for the
+       CINEMATHEQUE brand lettering. Colourway as the customer site: FDCP yellow / black / white. */
     --font: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-display: "Oswald", "Geist", system-ui, sans-serif;
     --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
-    --fs-xs: 12px; --fs-sm: 13px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 22px;
+    --fs-xs: 12px; --fs-sm: 13px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 26px;
 
-    --gray-50: #f9fafb; --gray-100: #f3f4f6; --gray-200: #e5e7eb; --gray-300: #d1d5db; --gray-400: #9ca3af;
-    --gray-500: #6b7280; --gray-600: #4b5563; --gray-700: #374151; --gray-800: #1f2937; --gray-900: #111827;
+    /* warm neutrals (as the customer site), not cool blue-greys */
+    --gray-50: #fafaf9; --gray-100: #f5f5f4; --gray-200: #e7e5e4; --gray-300: #d6d3d1; --gray-400: #a8a29e;
+    --gray-500: #78716c; --gray-600: #57534e; --gray-700: #44403c; --gray-800: #292524; --gray-900: #1c1917;
 
-    --bg: #f4f5f7; --surface: #fff; --surface-alt: #f9fafb; --border: #e5e7eb; --border-strong: #d1d5db;
-    --text: #111827; --muted: #6b7280;
+    --bg: #faf9f7; --surface: #fff; --surface-alt: #f7f5f0; --border: #e8e4dc; --border-strong: #d4cec3;
+    --text: #121212; --muted: #57534e;
 
-    --primary: #580076; --primary-hover: #46005e; --primary-soft: #f5eefa; --on-primary: #fff; --focus: rgba(88, 0, 118, .25);
-    --link: #580076;
+    /* --primary is the accent used as TEXT and outlines (selected chips, tabs, checkboxes): black on light.
+       Primary BUTTONS use the gold gradient below (--gold-grad), as on the customer site. */
+    --primary: #121212; --primary-hover: #000; --primary-soft: #fff3cc; --on-primary: #fff; --focus: rgba(235, 188, 0, .35);
+    --gold: #ebbc00; --gold-600: #cc8500; --gold-300: #ffcc00; --gold-text: #8a5a00;
+    --gold-grad: linear-gradient(90deg, var(--gold-600), var(--gold-300));
+    --link: #8a5a00;
     --success: #15803d; --success-bg: #ecfdf3; --success-border: #bbf7d0;
     --warning: #b45309; --warning-bg: #fffbeb; --warning-border: #fde68a;
     --danger: #b91c1c; --danger-hover: #991b1b; --danger-bg: #fef2f2; --danger-border: #fecaca;
     --info: #1d4ed8; --info-bg: #eff6ff; --info-border: #bfdbfe;
 
-    --side-bg: #111827; --side-fg: #d1d5db; --side-muted: #9ca3af; --side-hover: rgba(255, 255, 255, .06); --side-active: rgba(255, 255, 255, .1);
+    --side-bg: #121212; --side-fg: #d6d3d1; --side-muted: #8a857d; --side-hover: rgba(255, 255, 255, .06); --side-active: rgba(235, 188, 0, .12);
     --topbar-bg: #fff;
 
     --r-xs: 2px; --r-sm: 4px; --r-md: 6px;
-    --shadow-pop: 0 10px 24px -8px rgba(17, 24, 39, .22);
-    --sidebar-w: 224px;
+    --shadow-pop: 0 10px 24px -8px rgba(18, 18, 18, .22);
+    --sidebar-w: 232px;
     --ease: cubic-bezier(.4, 0, .2, 1); --t-fast: 120ms; --t-med: 200ms;
 }
 
 :root[data-theme="dark"] {
     color-scheme: dark;
-    --gray-50: #161b22; --gray-100: #1c2128; --gray-200: #2d333b; --gray-300: #3d444d; --gray-400: #768390;
-    --gray-500: #909dab; --gray-600: #adbac7; --gray-700: #c9d1d9; --gray-800: #e6edf3; --gray-900: #f0f6fc;
-    --bg: #0d1117; --surface: #161b22; --surface-alt: #1c2128; --border: #2d333b; --border-strong: #3d444d;
-    --text: #e6edf3; --muted: #909dab;
-    --primary: #8a2bb8; --primary-hover: #9d3dcc; --primary-soft: #2a1f33; --focus: rgba(180, 120, 220, .35);
-    --link: #d2a8ec;
+    --gray-50: #161616; --gray-100: #1e1e1e; --gray-200: #2c2b28; --gray-300: #3d3b37; --gray-400: #6f6a63;
+    --gray-500: #8a857d; --gray-600: #b3aea6; --gray-700: #d6d3d1; --gray-800: #e7e5e4; --gray-900: #f5f3ee;
+    --bg: #0e0e0e; --surface: #181818; --surface-alt: #1e1e1e; --border: #2c2b28; --border-strong: #3d3b37;
+    --text: #f5f3ee; --muted: #b3aea6;
+    --primary: #ebbc00; --primary-hover: #ffcc00; --primary-soft: #2f2610; --on-primary: #121212; --focus: rgba(235, 188, 0, .35);
+    --gold-text: #f2c94c;
+    --link: #f2c94c;
     --success: #4ade80; --success-bg: #0f2a1a; --success-border: #14532d;
     --warning: #fbbf24; --warning-bg: #2a210c; --warning-border: #713f12;
     --danger: #f87171; --danger-hover: #fca5a5; --danger-bg: #2c1515; --danger-border: #7f1d1d;
     --info: #93c5fd; --info-bg: #0f1f33; --info-border: #1e3a8a;
-    --side-bg: #010409; --side-fg: #c9d1d9; --side-muted: #7d8590;
-    --topbar-bg: #161b22;
+    --side-bg: #090909; --side-fg: #d6d3d1; --side-muted: #8a857d;
+    --topbar-bg: #181818;
     --shadow-pop: 0 10px 24px -8px rgba(0, 0, 0, .7);
 }
 
@@ -64,9 +73,9 @@ h2 { font-size: var(--fs-lg); }
 h3 { font-size: var(--fs-md); }
 p { margin: 0 0 12px; }
 [hidden] { display: none !important; }
-:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--gold-600); outline-offset: 2px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.skip-link { position: absolute; left: 16px; top: -60px; z-index: 100; background: var(--primary); color: #fff; padding: 8px 14px; border-radius: var(--r-sm); }
+.skip-link { position: absolute; left: 16px; top: -60px; z-index: 100; background: var(--primary); color: var(--on-primary); padding: 8px 14px; border-radius: var(--r-sm); }
 .skip-link:focus { top: 8px; }
 .muted { color: var(--muted); }
 .small { font-size: var(--fs-sm); }
@@ -128,7 +137,7 @@ kbd { font-size: 11px; color: var(--muted); border: 1px solid var(--border-stron
 .usermenu__who { display: grid; gap: 2px; padding: 8px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
 .usermenu__panel a, .usermenu__panel button { display: flex; width: 100%; padding: 7px 10px; border: 0; border-radius: var(--r-sm); background: none; color: var(--gray-700); font: inherit; text-align: left; cursor: pointer; }
 .usermenu__panel a:hover, .usermenu__panel button:hover { background: var(--gray-100); text-decoration: none; }
-.avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--primary); color: #fff; font-size: var(--fs-xs); font-weight: 600; }
+.avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--gold-grad); color: #121212; font-size: var(--fs-xs); font-weight: 600; }
 .avatar--sm { width: 26px; height: 26px; font-size: 11px; }
 .content { flex: 1; width: 100%; max-width: 1440px; padding: 20px 24px 40px; }
 
@@ -423,11 +432,59 @@ dialog.modal::backdrop { background: rgba(17, 24, 39, .45); }
 .pagination [aria-current="page"] span { background: var(--gray-800); border-color: var(--gray-800); color: #fff; }
 .pagination p { color: var(--muted); font-size: var(--fs-sm); }
 
-/* ---------- Sign-in page ---------- */
-.auth-page { min-height: 100vh; display: grid; grid-template-columns: 1fr 1fr; }
-.auth-page__form { display: flex; align-items: center; justify-content: center; padding: 32px 20px; }
-.auth-page__art { display: flex; flex-direction: column; justify-content: center; padding: 48px; background: var(--side-bg); color: #fff; }
-@media (max-width: 860px) { .auth-page { grid-template-columns: 1fr; } .auth-page__art { display: none; } }
+/* ---------- Sign-in page ----------
+   Minimal split screen in white / black / mustard. Left: one 400px column holding the logo, the form and the
+   footer, so they share a left edge. Right: solid black with the CINEMA / THEQUE wordmark and the FDCP line.
+   Both panels use the same top/bottom padding (--signin-pad), so their footers line up. */
+.signin-body { background: #fff; }
+.signin { --signin-pad: 40px; --mustard: #e5ad00; --mustard-hover: #f0b90b; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.signin__form { display: flex; justify-content: center; padding: var(--signin-pad) clamp(24px, 6vw, 80px); background: #fff; color: #121212; }
+.signin__col { display: flex; flex-direction: column; width: 100%; max-width: 360px; min-height: calc(100vh - 2 * var(--signin-pad)); }
+.signin__brand { display: inline-flex; align-items: center; gap: 12px; align-self: flex-start; color: #121212; }
+.signin__brand:hover { text-decoration: none; color: #121212; }
+.signin__brand b { display: block; font: 600 14px/1.05 var(--font-display); letter-spacing: .16em; text-transform: uppercase; }
+.signin__brand small { display: block; margin-top: 2px; font-size: 9px; font-weight: 600; letter-spacing: .26em; text-transform: uppercase; color: #8a6a00; }
+.signin__mark { display: block; width: 40px; height: 20px; flex: none; background: var(--mustard); -webkit-mask: var(--brand-mask) center / contain no-repeat; mask: var(--brand-mask) center / contain no-repeat; }
+.signin__box { margin: auto 0; padding: 48px 0; }
+.signin__box h1 { margin: 0 0 6px; font: 600 26px/1.2 var(--font); letter-spacing: -.02em; color: #121212; }
+.signin__lead { margin: 0 0 24px; font-size: 13.5px; color: #6b6b6b; }
+.signin .field { margin-bottom: 14px; }
+.signin .field label { display: block; margin-bottom: 6px; font-size: 12.5px; font-weight: 500; color: #121212; }
+.signin .field input { width: 100%; height: 42px; padding: 0 12px; border: 1px solid #d9d9d9; border-radius: 7px; background: #fff; color: #121212; font: 400 14px var(--font); box-shadow: none; transition: border-color .15s, box-shadow .15s; }
+.signin .field input:hover { border-color: #a8a8a8; }
+.signin .field input:focus { outline: none; border-color: #121212; box-shadow: 0 0 0 3px rgba(229, 173, 0, .28); }
+.signin__password { position: relative; }
+.signin .signin__password input { padding-right: 68px; }
+.signin__reveal { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); height: 32px; padding: 0 10px; border: 0; border-radius: 6px; background: none; color: #6b6b6b; font: 500 12.5px/1 var(--font); cursor: pointer; }
+.signin__reveal:hover { color: #121212; background: #f3f3f3; }
+.signin .signin__submit { height: 42px; margin-top: 8px; border: 0; border-radius: 7px; background: var(--mustard); color: #121212; font: 600 14px var(--font); letter-spacing: .01em; filter: none; }
+.signin .signin__submit:hover { background: var(--mustard-hover); color: #121212; }
+.signin__help { margin: 18px 0 0; font-size: 12.5px; line-height: 1.55; color: #6b6b6b; }
+.signin__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px 20px; min-height: 38px; font-size: 12px; color: #8a8a8a; }
+
+.signin__art { display: flex; flex-direction: column; padding: var(--signin-pad) clamp(40px, 6vw, 88px); background: #0b0b0b; color: #fff; container-type: inline-size; }
+.signin__wordmark { display: grid; margin: auto 0; font: 700 26cqi/.9 var(--font-display); letter-spacing: -.005em; text-transform: uppercase; user-select: none; color: var(--mustard);
+    background: var(--wordmark-photo, none) 50% 30% / cover no-repeat, linear-gradient(100deg, #c98a00 0%, #f2b705 30%, #ffd75a 50%, #e5ad00 72%, #c98a00 100%);
+    background-blend-mode: soft-light, normal; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    animation: signin-pan 40s ease-in-out infinite alternate; }
+.signin__wordmark span { padding: .02em 0; }
+@keyframes signin-pan { from { background-position: 50% 20%, 0 0; } to { background-position: 50% 70%, 0 0; } }
+@media (prefers-reduced-motion: reduce) { .signin__wordmark { animation: none; } }
+.signin__art-foot { display: flex; align-items: center; gap: 12px; min-height: 38px; font-size: 12px; font-weight: 600; line-height: 1.35; }
+.signin__art-foot img { width: 34px; height: 38px; border-radius: 5px; object-fit: cover; }
+.signin__art-foot small { display: block; font-size: 11.5px; font-weight: 400; color: rgba(255, 255, 255, .55); }
+
+@media (max-width: 900px) {
+    .signin { --signin-pad: 28px; grid-template-columns: 1fr; }
+    .signin__art { order: -1; padding: 28px 24px; }
+    .signin__wordmark { display: block; font-size: 15.8cqi; white-space: nowrap; }
+    .signin__art-foot { display: none; }
+    .signin__form { padding: 32px 24px; }
+    .signin__col { min-height: 0; }
+    .signin__box { padding: 8px 0 40px; }
+    .signin__brand { display: none; } /* the black banner above already names the place */
+    .signin__foot { flex-direction: column; align-items: flex-start; gap: 6px; }
+}
 
 /* ---------- Motion ---------- */
 @keyframes flash { from { background: var(--success-bg); } to { background: transparent; } }
@@ -473,3 +530,24 @@ kbd { border-radius: 4px; }
 .type-toggle label:last-child { border-right: 1px solid var(--border-strong); }
 .type-toggle label:has(input:checked) { border-color: var(--primary); }
 .table .center { text-align: center; font-variant-numeric: tabular-nums; }
+
+/* ---------- Customer-site look across the staff area ---------- */
+/* Page titles: Geist, semibold, slightly tight */
+.page-head h1 { font-weight: 600; letter-spacing: -.02em; }
+/* Primary buttons: the customer site's gold button (dark text) in both themes */
+.btn--primary { --bg: var(--gold); --fg: #121212; --bd: var(--gold-600); background: var(--gold-grad); color: #121212; font-weight: 600; }
+.btn--primary:hover { background: var(--gold-grad); border-color: var(--gold-600); filter: brightness(1.05); color: #121212; }
+/* Sidebar: black with the serpent mark; the active page gets a gold bar and gold icon */
+.sidebar__mark { display: block; width: 46px; height: 24px; flex: none; background: var(--gold); -webkit-mask: var(--brand-mask) center / contain no-repeat; mask: var(--brand-mask) center / contain no-repeat; }
+.sidebar__brand b { font-family: var(--font-display); font-size: 16px; font-weight: 600; letter-spacing: .14em; }
+.sidebar__brand span { font-size: 9.5px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--gold); }
+.sidebar { border-right: 1px solid rgba(235, 188, 0, .14); }
+.side-label { color: #8a857d; letter-spacing: .14em; }
+.side-link[aria-current="page"] { color: #fff; }
+.side-link[aria-current="page"]::before { background: var(--gold); }
+.side-link[aria-current="page"] svg { color: var(--gold); opacity: 1; }
+/* Tabs and selected filters: gold underline / black (gold in dark) */
+.tabs a[aria-current="page"] { border-color: var(--gold); }
+.chips [aria-current="page"], .chips [aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+:root[data-theme="dark"] .chips [aria-current="page"], :root[data-theme="dark"] .chips [aria-pressed="true"] { border-color: var(--primary); }
+.topbar__search input:focus, .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--gold-600); }

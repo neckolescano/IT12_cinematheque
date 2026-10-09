@@ -11,7 +11,7 @@
     <script>document.documentElement.classList.add('js')</script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@500;600&family=Geist:wght@400;500;600&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;600&family=Oswald:wght@600;700&display=swap">
     <link rel="stylesheet" href="{{ asset('css/admin.css') }}?v={{ filemtime(public_path('css/admin.css')) }}">
     <script src="{{ asset('js/admin.js') }}?v={{ filemtime(public_path('js/admin.js')) }}" defer></script>
 </head>
@@ -56,11 +56,7 @@
 <div class="admin-shell">
     <aside class="sidebar" aria-label="Admin navigation">
         <a class="sidebar__brand" href="{{ route('staff.dashboard') }}">
-            <svg viewBox="0 0 40 40" aria-hidden="true">
-                <rect x="1" y="1" width="38" height="38" rx="9" fill="#141219"/>
-                <rect x="7" y="9" width="26" height="22" rx="4" fill="none" stroke="#ebbc00" stroke-width="2"/>
-                <path d="M11 27 L16 19 L19 23 L23 15 L29 27 Z" fill="#fff"/>
-            </svg>
+            <span class="sidebar__mark" aria-hidden="true" style="--brand-mask: url('{{ asset('images/brand/cinematheque-serpent-mask.png') }}')"></span>
             <div><b>CINEMATHEQUE</b><span>Centre Davao</span></div>
         </a>
 
