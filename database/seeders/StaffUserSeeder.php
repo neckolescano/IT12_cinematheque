@@ -6,11 +6,10 @@ use App\Models\User;
 use Illuminate\Database\Seeder;
 
 /**
- * The "RBAC seeder".
+ * The "RBAC seeder": the default staff accounts.
  *
- * Per the RBAC spec there are no roles/permissions tables: being an active row
- * in `users` is the only access tier. So seeding "roles" means seeding the
- * default staff accounts — one per position — which have identical access.
+ * Two roles (users.role): one Super Admin, held by FDCP Manila (locks and unlocks reports,
+ * manages staff), and admins for daily operations — one admin per position (AVT, PDO).
  *
  * Change these passwords immediately after the first login.
  */
@@ -26,9 +25,15 @@ class StaffUserSeeder extends Seeder
         foreach ($accounts as $account) {
             User::updateOrCreate(
                 ['email' => $account['email']],
-                [...$account, 'password' => 'password', 'is_active' => true],
+                [...$account, 'role' => 'admin', 'password' => 'password', 'is_active' => true],
             );
         }
+
+        // The one Super Admin account (FDCP Manila).
+        User::updateOrCreate(
+            ['email' => 'manila@cinematheque.test'],
+            ['first_name' => 'FDCP', 'last_name' => 'Manila', 'position' => null, 'role' => 'super_admin', 'password' => 'password', 'is_active' => true],
+        );
 
         // An inactive account, useful for checking that deactivated staff are locked out.
         User::updateOrCreate(

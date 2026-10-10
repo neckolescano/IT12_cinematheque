@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Movie;
+use App\Models\Program;
 use App\Models\Reservation;
 use App\Models\Screening;
 use App\Models\User;
@@ -31,9 +32,20 @@ class DemoScreeningSeeder extends Seeder
         $screen = function (string $title, int $day, string $time, ?float $price = null, ?User $by = null) use ($avt) {
             $start = Carbon::parse($time);
 
+            // An event that isn't a catalogued film (a shorts block) gets its own film record in Community Screenings.
+            $movie = Movie::where('title', $title)->first();
+            $programId = $movie?->programs()->value('programs.program_id')
+                ?? Program::where('name', 'Community Screenings')->value('program_id');
+            if (! $movie) {
+                $movie = Movie::create(['title' => $title]);
+                $movie->programs()->attach($programId);
+            }
+
             return Screening::create([
                 'event_title' => $title,
-                'movie_id' => Movie::where('title', $title)->value('movie_id'),
+                'movie_id' => $movie->movie_id,
+                'films_count' => str_starts_with($title, 'Shorts') ? 5 : 1,
+                'program_id' => $programId,
                 'event_date' => today()->addDays($day),
                 'start_time' => $start->format('H:i'),
                 'end_time' => $start->copy()->addHours(2)->format('H:i'),
@@ -62,7 +74,6 @@ class DemoScreeningSeeder extends Seeder
         $sentimental = $screen('Sentimental Value', 7, '17:00', 150, $pdo);
 
         // Free: awaiting approval, approved, and cancelled by staff (its seats are free again).
-        Reservation::factory()->for($malvarosa)->pending()->withSeats(2)->create();
         Reservation::factory()->for($malvarosa)->withSeats(3)->create(['status' => 'confirmed']);
         Reservation::factory()->for($shorts)->withSeats(2)->create(['status' => 'confirmed']);
         Reservation::factory()->for($biyaya)->withSeats(2)->create(['status' => 'confirmed'])->cancel('staff');
@@ -72,11 +83,11 @@ class DemoScreeningSeeder extends Seeder
         $this->paid(Reservation::factory()->for($sentimental)->withSeats(4)->create(['status' => 'confirmed']), 600.00);
 
         // Awaiting payment: held for 15 minutes from now.
-        Reservation::factory()->for($accident)->pending()->withSeats(2)->create()
+        Reservation::factory()->for($accident)->awaitingPayment()->withSeats(2)->create()
             ->payment()->create(['amount' => 300.00, 'status' => 'pending']);
 
         // Never paid: its window passed an hour ago, so the first page visit expires it.
-        Reservation::factory()->for($accident)->pending()->withSeats(2)->create(['reservation_datetime' => now()->subHour()])
+        Reservation::factory()->for($accident)->awaitingPayment()->withSeats(2)->create(['reservation_datetime' => now()->subHour()])
             ->payment()->create(['amount' => 300.00, 'status' => 'pending']);
 
         // Almost full.

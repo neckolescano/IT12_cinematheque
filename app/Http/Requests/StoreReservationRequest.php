@@ -27,7 +27,26 @@ class StoreReservationRequest extends FormRequest
     /** Philippine mobile number: 09XXXXXXXXX (11 digits) or +639XXXXXXXXX. Checked after spaces/dashes are removed. */
     public const PH_MOBILE = '/^(09\d{9}|\+639\d{9})$/';
 
-    public const PH_MOBILE_MESSAGE = 'Enter the 10 digits of the mobile number after +63 (it starts with 9).';
+    public const PH_MOBILE_MESSAGE = 'Enter the 10 digits after +63 (starts with 9).';
+
+    /** PWD ID number (national PWD registry): region (2) - city/municipality (4) - barangay (3) - sequence (7). */
+    public const PWD_ID = '/^\d{2}-\d{4}-\d{3}-\d{7}$/';
+
+    /** Senior Citizen (OSCA) ID: formats differ per city, so letters, digits, spaces and hyphens, 4–20 characters. */
+    public const SENIOR_ID = '/^[A-Za-z0-9\- ]{4,20}$/';
+
+    /** "13 7605 000 0000001" or 16 plain digits → "13-7605-000-0000001"; anything else is left for validation to reject. */
+    public static function formatPwdId(?string $value): ?string
+    {
+        if (blank($value)) {
+            return null;
+        }
+        $digits = preg_replace('/\D/', '', $value);
+
+        return strlen($digits) === 16
+            ? substr($digits, 0, 2).'-'.substr($digits, 2, 4).'-'.substr($digits, 6, 3).'-'.substr($digits, 9)
+            : trim($value);
+    }
 
     public function authorize(): bool
     {
@@ -54,6 +73,12 @@ class StoreReservationRequest extends FormRequest
             foreach ($attendees as $seatId => $attendee) {
                 if (is_array($attendee) && isset($attendee['contact_no'])) {
                     $attendees[$seatId]['contact_no'] = $clean($attendee['contact_no']);
+                }
+                if (is_array($attendee) && isset($attendee['pwd_id_no'])) {
+                    $attendees[$seatId]['pwd_id_no'] = self::formatPwdId($attendee['pwd_id_no']);
+                }
+                if (is_array($attendee) && isset($attendee['senior_card_no'])) {
+                    $attendees[$seatId]['senior_card_no'] = trim(preg_replace('/\s+/', ' ', $attendee['senior_card_no'])) ?: null;
                 }
             }
         }
@@ -83,6 +108,8 @@ class StoreReservationRequest extends FormRequest
         return [
             'lead_contact_no.regex' => self::PH_MOBILE_MESSAGE,
             'attendees.*.contact_no.regex' => self::PH_MOBILE_MESSAGE,
+            'attendees.*.pwd_id_no.regex' => 'Enter the 16-digit PWD ID number (e.g. 11-2402-000-0001234).',
+            'attendees.*.senior_card_no.regex' => 'Use 4–20 letters, numbers, spaces or hyphens.',
         ];
     }
 
@@ -110,8 +137,8 @@ class StoreReservationRequest extends FormRequest
             'attendees.*.company_school' => ['required', 'string', 'max:150'],
             'attendees.*.contact_no' => ['required', 'string', 'max:20', 'regex:'.self::PH_MOBILE],
             'attendees.*.email' => ['required', 'email', 'max:100'],
-            'attendees.*.senior_card_no' => ['nullable', 'string', 'max:30'],
-            'attendees.*.pwd_id_no' => ['nullable', 'string', 'max:30'],
+            'attendees.*.senior_card_no' => ['nullable', 'string', 'regex:'.self::SENIOR_ID],
+            'attendees.*.pwd_id_no' => ['nullable', 'string', 'regex:'.self::PWD_ID],
         ];
     }
 
@@ -133,6 +160,7 @@ class StoreReservationRequest extends FormRequest
             'attendees.*.company_school' => 'company or school',
             'attendees.*.contact_no' => 'attendee contact number',
             'attendees.*.pwd_id_no' => 'PWD ID number',
+            'attendees.*.senior_card_no' => 'Senior Citizen ID number',
         ];
     }
 

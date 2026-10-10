@@ -9,7 +9,7 @@
     $approved = $reservation->status === 'confirmed';
     $seats = $reservation->reservationSeats;
     $methodNames = ['card' => 'Card', 'gcash' => 'GCash', 'paymaya' => 'Maya', 'grab_pay' => 'GrabPay', 'qrph' => 'QR Ph', 'shopee_pay' => 'ShopeePay', 'billease' => 'BillEase'];
-    $methods = collect(config('services.paymongo.payment_method_types'))->map(fn ($m) => $methodNames[$m] ?? ucfirst($m));
+    $methods = collect(\App\Services\ReservationPayments::paymentMethods())->map(fn ($m) => $methodNames[$m] ?? ucfirst($m));
 
     // The status panel at the top, as in the mobile app.
     [$tone, $headline, $message] = match (true) {
@@ -18,7 +18,7 @@
         $cancelled => ['neutral', 'Booking cancelled', $payment?->isPaid() ? 'Refunds for paid bookings are handled directly by Cinematheque Centre Davao.' : 'This booking can no longer be used for admission.'],
         $approved => ['success', 'Booking confirmed', 'Your e-ticket is below and was sent to '.$reservation->lead_email.'. Show it at the entrance.'],
         $canPay => ['gold', 'Payment needed', 'Your seats are held'.($payBy ? ' until '.$payBy->format('g:i A') : '').'. Pay before then to confirm them.'],
-        default => ['gold', 'Reservation received', 'Cinematheque staff will review it. Your e-ticket is emailed to '.$reservation->lead_email.' once it is approved.'],
+        default => ['gold', 'Awaiting payment', 'Your e-ticket is emailed to '.$reservation->lead_email.' as soon as PayMongo confirms the payment.'],
     };
 @endphp
 
@@ -35,7 +35,7 @@
     @endif
 
     @unless ($cancelled)
-        <x-stepper :current="3" :paid="(bool) $payment" class="no-print" />
+        <x-stepper :current="4" :paid="(bool) $payment" class="no-print" />
     @endunless
 
     <div class="status status--{{ $tone }}" role="status">

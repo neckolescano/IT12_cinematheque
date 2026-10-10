@@ -54,7 +54,7 @@
         <ol class="how">
             <li><strong>Choose your seats</strong><span>Pick a screening and up to {{ \App\Http\Requests\StoreReservationRequest::MAX_SEATS_PER_RESERVATION }} seats, then enter who is using each one.</span></li>
             <li><strong>Paid screenings</strong><span>Pay online through PayMongo within {{ \App\Models\Reservation::PAYMENT_WINDOW_MINUTES }} minutes, or the seats are released.</span></li>
-            <li><strong>Free screenings</strong><span>Cinematheque staff review your reservation. Your e-ticket is emailed once it is approved.</span></li>
+            <li><strong>Free screenings</strong><span>Your reservation is confirmed as soon as you submit it, and your e-ticket is emailed straight away.</span></li>
             <li><strong>At the cinema</strong><span>Show your e-ticket or booking reference at the entrance.</span></li>
         </ol>
     </section>

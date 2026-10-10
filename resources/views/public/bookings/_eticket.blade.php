@@ -32,7 +32,7 @@
             </div>
             <div class="eticket__stub">
                 <div class="eticket__admit">
-                    <strong>{{ $approved ? 'ADMIT '.$seats->count() : ($cancelled ? 'CANCELLED' : 'PENDING') }}</strong>
+                    <strong>{{ $approved ? 'ADMIT '.$seats->count() : ($cancelled ? 'CANCELLED' : 'AWAITING PAYMENT') }}</strong>
                     @unless ($approved)<span>{{ $cancelled ? 'Not valid for entry' : 'Not yet valid for entry' }}</span>@endunless
                 </div>
                 <div class="eticket__ref">

@@ -34,6 +34,7 @@ class SeatReleaseAndExpiryTest extends TestCase
     private function bookingPayload(Seat $seat): array
     {
         return [
+            'reviewed' => 1,
             'seat_ids' => [$seat->seat_id],
             'lead_first_name' => 'Ana', 'lead_last_name' => 'Santos',
             'lead_contact_no' => '09171234567', 'lead_email' => 'ana@example.test',
@@ -44,7 +45,7 @@ class SeatReleaseAndExpiryTest extends TestCase
 
     private function unpaidBooking(): Reservation
     {
-        $reservation = Reservation::factory()->for(Screening::factory()->paid(150))->pending()->withSeats([Seat::first()])->create();
+        $reservation = Reservation::factory()->for(Screening::factory()->paid(150))->awaitingPayment()->withSeats([Seat::first()])->create();
         $reservation->payment()->create(['amount' => 150, 'status' => 'pending', 'provider_session_id' => 'cs_late']);
 
         return $reservation;
@@ -98,7 +99,7 @@ class SeatReleaseAndExpiryTest extends TestCase
 
         $this->travel(14)->minutes();
         $this->get(route('home'))->assertOk();
-        $this->assertSame('pending', $reservation->fresh()->status);
+        $this->assertSame('awaiting_payment', $reservation->fresh()->status);
 
         $this->travel(2)->minutes();
         $this->get(route('home'))->assertOk();
@@ -110,16 +111,16 @@ class SeatReleaseAndExpiryTest extends TestCase
         $this->get(route('bookings.show', $reservation))->assertSee('Reservation expired');
     }
 
-    public function test_free_and_paid_bookings_awaiting_staff_or_already_paid_never_expire(): void
+    public function test_free_bookings_and_paid_bookings_already_paid_never_expire(): void
     {
-        $free = Reservation::factory()->for(Screening::factory())->pending()->withSeats(1)->create();
+        $free = Reservation::factory()->for(Screening::factory())->withSeats(1)->create();
         $paid = Reservation::factory()->for(Screening::factory()->paid(150))->withSeats(1)->create(['status' => 'confirmed']);
         $paid->payment()->create(['amount' => 150, 'status' => 'verified']);
 
         $this->travel(2)->days();
         $this->artisan('reservations:expire-unpaid')->assertSuccessful();
 
-        $this->assertSame('pending', $free->fresh()->status);
+        $this->assertSame('confirmed', $free->fresh()->status);
         $this->assertSame('confirmed', $paid->fresh()->status);
     }
 
@@ -135,7 +136,7 @@ class SeatReleaseAndExpiryTest extends TestCase
         $this->assertSame('cancelled', $reservation->fresh()->status);
         $this->assertSame('verified', $reservation->payment->fresh()->status);
         Mail::assertNotSent(ReservationApprovedMail::class);
-        $this->actingAs(User::factory()->create())->get(route('staff.reservations.show', $reservation))->assertSee('Refund due');
+        $this->actingAs(User::factory()->create())->followingRedirects()->get(route('staff.reservations.show', $reservation))->assertSee('refund due');
     }
 
     public function test_a_payment_made_in_time_but_reported_after_expiry_gets_its_seats_back(): void

@@ -9,7 +9,7 @@
             <h1>Dashboard</h1>
             <p class="figures">
                 <a href="{{ route('staff.screenings.index') }}"><b>{{ $summary['upcoming'] }}</b> upcoming {{ Str::plural('screening', $summary['upcoming']) }}</a>
-                <a href="{{ route('staff.reservations.index', ['view' => 'payment']) }}"><b>{{ $summary['awaiting_payment'] }}</b> awaiting payment</a>
+                <span><b>{{ $summary['awaiting_payment'] }}</b> awaiting payment</span>
                 <a href="{{ route('staff.reports.index') }}"><b>₱{{ number_format($summary['paid_7d'], 0) }}</b> paid this week</a>
             </p>
         </div>
@@ -46,7 +46,7 @@
             <section class="block" aria-labelledby="week-title">
                 <div class="block__head">
                     <h2 id="week-title">Next 7 days</h2>
-                    <a href="{{ route('staff.screenings.index') }}">Attendance</a>
+                    <a href="{{ route('staff.screenings.index') }}">All screenings</a>
                 </div>
                 @if ($week->isEmpty())
                     <p class="quiet">Nothing scheduled.</p>
@@ -57,40 +57,26 @@
         </div>
 
         <aside class="split__side">
-            {{-- 3. Waiting on staff: approve right here, no page change --}}
+            {{-- 3. Waiting on staff: refunds to make (bookings are approved automatically) --}}
             <section class="block" aria-labelledby="action-title">
                 <div class="block__head">
-                    <h2 id="action-title">Needs action @if ($toApproveTotal + $refunds->count())<span class="count count--warn">{{ $toApproveTotal + $refunds->count() }}</span>@endif</h2>
-                    @if ($toApproveTotal > $toApprove->count())
-                        <a href="{{ route('staff.reservations.index', ['view' => 'approve']) }}">All {{ $toApproveTotal }}</a>
-                    @endif
+                    <h2 id="action-title">Needs action @if ($refunds->count())<span class="count count--warn">{{ $refunds->count() }}</span>@endif</h2>
                 </div>
-                @if ($toApprove->isEmpty() && $refunds->isEmpty())
-                    <p class="quiet">Nothing to approve or refund.</p>
+                @if ($refunds->isEmpty())
+                    <p class="quiet">Nothing to refund.</p>
                 @else
-                    @if ($toApprove->isNotEmpty())
-                        <h3 class="day">To approve</h3>
-                        <ul class="rows rows--compact">
-                            @foreach ($toApprove as $r)
-                                @include('staff.partials.booking-row', ['r' => $r, 'showState' => false])
-                            @endforeach
-                        </ul>
-                    @endif
-                    @if ($refunds->isNotEmpty())
-                        <h3 class="day">Refunds due</h3>
-                        <ul class="rows rows--compact">
-                            @foreach ($refunds as $r)
-                                @include('staff.partials.booking-row', ['r' => $r, 'showState' => false])
-                            @endforeach
-                        </ul>
-                    @endif
+                    <h3 class="day">Refunds due</h3>
+                    <ul class="rows rows--compact">
+                        @foreach ($refunds as $r)
+                            @include('staff.partials.booking-row', ['r' => $r, 'showState' => false])
+                        @endforeach
+                    </ul>
                 @endif
             </section>
 
             <section class="block" aria-labelledby="recent-title">
                 <div class="block__head">
                     <h2 id="recent-title">Recent bookings</h2>
-                    <a href="{{ route('staff.reservations.index') }}">View all</a>
                 </div>
                 @if ($recent->isEmpty())
                     <p class="quiet">No bookings yet.</p>

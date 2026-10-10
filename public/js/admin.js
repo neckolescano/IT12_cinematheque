@@ -258,7 +258,7 @@
         sync(false);
     });
 
-    /* ---- Screening form: film or programme; a known film title fills in its details;
+    /* ---- Screening form: every screening has a film (a shorts block is a film record); a known film title fills in its details;
             end time = start + runtime; the price field only shows for paid screenings. ----- */
     document.querySelectorAll('[data-screening-form]').forEach(function (box) {
         var catalog = [];
@@ -273,9 +273,10 @@
         var field = function (name) { return box.querySelector('[data-film="' + name + '"]'); };
         var autoEnd = null;
 
-        function isFilm() { var f = box.querySelector('[data-kind-input][value=film]'); return f && f.checked; }
+        function isFilm() { var f = box.querySelector('[data-kind-input][value=film]'); return !f || f.checked; }
         function syncKind() {
             var film = isFilm();
+            if (!box.querySelector('[data-kind-input]')) { filmFields.hidden = false; titleInput.required = true; return; }
             filmFields.hidden = !film;
             titleInput.required = film;
             box.querySelector('[data-title-label-film]').hidden = !film;
@@ -291,6 +292,8 @@
             var m = known();
             knownHint.hidden = !m;
             if (!m) return;
+            var program = box.querySelector('[data-program-input]');
+            if (program && !program.value && m.programs && m.programs.length === 1) program.value = m.programs[0];
             [['runtime', m.runtime], ['rating', m.rating], ['year', m.year], ['directors', m.directors], ['actors', m.actors]].forEach(function (pair) {
                 var el = field(pair[0]);
                 if (el && !el.value && pair[1]) el.value = pair[1];
@@ -349,10 +352,10 @@
             return ((h % 12) || 12) + ':' + m + (h < 12 ? ' AM' : ' PM');
         };
         var refresh = function () {
-            var film = q('[data-kind-input][value=film]').checked;
-            var title = (q('[data-event-title]').value || '').trim() || (film ? (q('[data-film-title]').value || '').trim() : '');
+            var title = (q('[data-event-title]').value || '').trim() || (q('[data-film-title]').value || '').trim();
             put('title', title);
-            put('kind', film ? 'Film' : 'Special programme');
+            var program = q('[data-program-input]');
+            put('program', program ? program.value.trim() : '');
             var d = q('[data-date-input]').value;
             put('date', d ? new Date(d + 'T00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '');
             var s = fmtTime(q('[data-start-input]').value), e = fmtTime(q('[data-end-input]').value);
@@ -363,6 +366,79 @@
         form.addEventListener('input', refresh);
         form.addEventListener('change', refresh);
         refresh();
+    }
+
+    /* ---- Program tags: Enter or a comma turns the typed text into a chip (hidden programs[] input);
+            × removes it. Duplicates (ignoring case) are skipped. ------------------------------------- */
+    document.querySelectorAll('[data-tags]').forEach(function (box) {
+        var input = box.querySelector('[data-tag-input]');
+        var add = function () {
+            var name = input.value.replace(/\s+/g, ' ').replace(/,/g, '').trim();
+            if (!name) return;
+            var key = name.toLowerCase();
+            if (!box.querySelector('[data-tag="' + CSS.escape(key) + '"]')) {
+                var chip = document.createElement('span');
+                chip.className = 'tag-chip';
+                chip.setAttribute('data-tag', key);
+                chip.appendChild(document.createTextNode(name));
+                var hidden = document.createElement('input');
+                hidden.type = 'hidden'; hidden.name = 'programs[]'; hidden.value = name;
+                var x = document.createElement('button');
+                x.type = 'button'; x.textContent = '×'; x.setAttribute('data-tag-remove', ''); x.setAttribute('aria-label', 'Remove ' + name);
+                chip.appendChild(hidden); chip.appendChild(x);
+                input.parentNode.insertBefore(chip, input);
+            }
+            input.value = '';
+            input.placeholder = 'Add another';
+        };
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(); }
+            if (e.key === 'Backspace' && !input.value) {
+                var chips = box.querySelectorAll('.tag-chip');
+                if (chips.length) chips[chips.length - 1].remove();
+            }
+        });
+        input.addEventListener('change', add); // a suggestion picked from the list, or leaving the box
+        box.addEventListener('click', function (e) {
+            if (e.target.hasAttribute('data-tag-remove')) { e.target.closest('.tag-chip').remove(); input.focus(); }
+        });
+    });
+
+    /* ---- Batch scheduling: "Repeat" shows "Until"; "Add showtime" adds a date + time row. ---------- */
+    document.querySelectorAll('[data-repeat]').forEach(function (sel) {
+        var until = sel.form.querySelector('[data-repeat-until]');
+        var sync = function () { if (until) until.hidden = sel.value === 'none'; };
+        sel.addEventListener('change', sync);
+        sync();
+    });
+    document.querySelectorAll('[data-more-showtimes]').forEach(function (box) {
+        var rows = box.querySelector('[data-more-rows]');
+        var next = rows.children.length;
+        box.querySelector('[data-more-add]').addEventListener('click', function () {
+            var row = rows.firstElementChild.cloneNode(true);
+            row.querySelectorAll('input').forEach(function (input) {
+                input.value = '';
+                input.name = input.name.replace(/more\[\d+\]/, 'more[' + next + ']');
+                input.id = input.id.replace(/_more_\d+_/, '_more_' + next + '_');
+            });
+            row.querySelectorAll('label').forEach(function (l) { l.htmlFor = l.htmlFor.replace(/_more_\d+_/, '_more_' + next + '_'); });
+            next++;
+            rows.appendChild(row);
+            row.querySelector('input').focus();
+        });
+        rows.addEventListener('click', function (e) {
+            if (!e.target.hasAttribute('data-more-remove')) return;
+            var row = e.target.closest('[data-more-row]');
+            if (rows.children.length > 1) row.remove();
+            else row.querySelectorAll('input').forEach(function (i) { i.value = ''; });
+        });
+    });
+
+    /* ---- Door check-in: reload when the window opens or closes, so the Admit buttons switch on (or off)
+            by themselves. The delay comes from the server clock, not this device's. ------------------ */
+    var checkin = document.querySelector('[data-reload-in]');
+    if (checkin) {
+        setTimeout(function () { location.reload(); }, (parseInt(checkin.getAttribute('data-reload-in'), 10) + 1) * 1000);
     }
 
     /* ---- Filters that apply as soon as they change (no "Apply" button) ------ */

@@ -31,7 +31,7 @@ class PayMongoPaymentTest extends TestCase
         Mail::fake();
         $this->seed(SeatSeeder::class);
 
-        $this->reservation = Reservation::factory()->for(Screening::factory()->paid(150))->pending()->withSeats(2)->create();
+        $this->reservation = Reservation::factory()->for(Screening::factory()->paid(150))->awaitingPayment()->withSeats(2)->create();
         $this->reservation->payment()->create(['amount' => 300, 'status' => 'pending']);
     }
 
@@ -67,7 +67,7 @@ class PayMongoPaymentTest extends TestCase
                 && $r['data']['attributes']['reference_number'] === $this->reservation->booking_reference
                 && $r['data']['attributes']['success_url'] === route('bookings.payment.return', $this->reservation);
         });
-        $this->assertSame('pending', $this->reservation->fresh()->status); // reaching checkout proves nothing
+        $this->assertSame('awaiting_payment', $this->reservation->fresh()->status); // reaching checkout proves nothing
     }
 
     public function test_an_open_session_is_reused_instead_of_creating_another(): void
@@ -91,7 +91,7 @@ class PayMongoPaymentTest extends TestCase
             ->assertSessionHas('warning');
 
         $this->assertSame('pending', $this->reservation->payment->fresh()->status);
-        $this->assertSame('pending', $this->reservation->fresh()->status);
+        $this->assertSame('awaiting_payment', $this->reservation->fresh()->status);
         Mail::assertNothingSent();
     }
 
@@ -123,7 +123,7 @@ class PayMongoPaymentTest extends TestCase
         $this->get(route('bookings.payment.return', $this->reservation));
 
         $this->assertSame('pending', $this->reservation->payment->fresh()->status);
-        $this->assertSame('pending', $this->reservation->fresh()->status);
+        $this->assertSame('awaiting_payment', $this->reservation->fresh()->status);
     }
 
     public function test_signed_webhook_settles_the_payment(): void
@@ -154,7 +154,7 @@ class PayMongoPaymentTest extends TestCase
             ->assertStatus(401);
 
         Http::assertNothingSent();
-        $this->assertSame('pending', $this->reservation->fresh()->status);
+        $this->assertSame('awaiting_payment', $this->reservation->fresh()->status);
     }
 
     public function test_paymongo_errors_and_missing_keys_are_handled(): void
@@ -166,7 +166,7 @@ class PayMongoPaymentTest extends TestCase
         config(['services.paymongo.secret_key' => null]);
         $this->get(route('bookings.pay', $this->reservation))->assertSessionHasErrors('payment');
 
-        $this->assertSame('pending', $this->reservation->fresh()->status);
+        $this->assertSame('awaiting_payment', $this->reservation->fresh()->status);
     }
 
     public function test_staff_can_refresh_payment_status_from_paymongo(): void

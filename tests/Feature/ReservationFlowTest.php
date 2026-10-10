@@ -29,6 +29,7 @@ class ReservationFlowTest extends TestCase
         }
 
         return array_merge([
+            'reviewed' => 1,
             'seat_ids' => $seatIds,
             'lead_first_name' => 'Ana',
             'lead_last_name' => 'Santos',
@@ -49,7 +50,7 @@ class ReservationFlowTest extends TestCase
             ->assertOk()->assertSee('Attendee for seat '.$seat->seat_label);
     }
 
-    public function test_free_reservation_creates_seats_and_attendees_and_waits_for_approval(): void
+    public function test_free_reservation_creates_seats_and_attendees_and_is_confirmed_at_once(): void
     {
         $screening = Screening::factory()->create();
         $seatIds = Seat::limit(3)->pluck('seat_id')->all();
@@ -58,7 +59,7 @@ class ReservationFlowTest extends TestCase
 
         $reservation = Reservation::firstOrFail();
         $response->assertRedirect(route('bookings.show', $reservation));
-        $this->assertSame('pending', $reservation->status); // approved by staff → e-ticket
+        $this->assertSame('confirmed', $reservation->status); // auto-approved: no staff step
         $this->assertCount(3, $reservation->reservationSeats);
         $this->assertCount(3, $reservation->attendees);
         $this->assertSame(1, $reservation->attendees()->where('is_lead_reserver', true)->count());
@@ -77,7 +78,7 @@ class ReservationFlowTest extends TestCase
 
         $reservation = Reservation::firstOrFail();
         $response->assertRedirect(route('bookings.pay', $reservation)); // straight on to PayMongo
-        $this->assertSame('pending', $reservation->status);
+        $this->assertSame('awaiting_payment', $reservation->status);
         $this->assertSame('pending', $reservation->payment->status);
         $this->assertSame('300.00', $reservation->payment->amount);
     }
@@ -164,12 +165,14 @@ class ReservationFlowTest extends TestCase
 
         // The form's field sits after a fixed "+63": 9 digits (the old "+639" field) are now one short.
         $this->post(route('bookings.store', $screening), [
+            'reviewed' => 1,
             'seat_ids' => [$a->seat_id],
             'attendees' => [$a->seat_id => $person('Ana', 'ana@example.test', '171234567')],
         ])->assertSessionHasErrors('attendees.'.$a->seat_id.'.contact_no');
 
         // Seats in picking order: B first, so B's person is the booker. No "Your details" fields are sent.
         $this->post(route('bookings.store', $screening), [
+            'reviewed' => 1,
             'seat_ids' => [$b->seat_id, $a->seat_id],
             'attendees' => [$b->seat_id => $person('Bea', 'bea@example.test'), $a->seat_id => $person('Ana', 'ana@example.test')],
         ])->assertSessionHasNoErrors();

@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Director;
 use App\Models\Genre;
 use App\Models\Movie;
+use App\Models\Program;
 use Illuminate\Database\Seeder;
 use Illuminate\Http\File;
 use Illuminate\Support\Facades\Storage;
@@ -35,6 +36,14 @@ class CatalogSeeder extends Seeder
         'Sentimental Value' => [2025, ['Joachim Trier'], 'sentimental-value.jpg'],
     ];
 
+    /** The lineup's programs (parents of films and screenings) => the films in each. */
+    public const PROGRAMS = [
+        'Pamanang Pelikula: Tribute to LVN Pictures' => ['Malvarosa', 'Biyaya ng Lupa', 'Anak Dalita'],
+        'Pamanang Pelikula: Tribute to Nora Aunor' => ['Himala'],
+        'FDCP Presents: World Cinema' => ['It Was Just an Accident', 'Case 137', 'The Secret Agent', 'Sound of Falling', 'Resurrection', 'The Blue Trail', 'Sentimental Value'],
+        'Community Screenings' => [],
+    ];
+
     public function run(): void
     {
         // The fixed genre list (not assigned: the lineup doesn't list genres).
@@ -46,6 +55,11 @@ class CatalogSeeder extends Seeder
 
             $movie = Movie::create(['title' => $title, 'release_year' => $year, 'poster_path' => $path]);
             $movie->directors()->sync(collect($directors)->map(fn ($name) => $this->director($name)->director_id));
+        }
+
+        foreach (self::PROGRAMS as $name => $titles) {
+            $program = Program::firstOrCreate(['name' => $name]);
+            $program->movies()->syncWithoutDetaching(Movie::whereIn('title', $titles)->pluck('movie_id'));
         }
     }
 

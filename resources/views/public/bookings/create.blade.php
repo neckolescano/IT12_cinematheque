@@ -25,15 +25,20 @@
                     <h1 id="seats-title" class="booking__title">Select your seats</h1>
                     <span class="muted small">{{ $available }} of {{ $screening->total_seats }} left</span>
                 </div>
-                {{-- The hall, as markers only (no walls): the screen, the 10 × 12 seat block (120 seats), an exit on each side
-                     in line with row B, and the entrance at the back, where you walk left or right to the aisles.
+                {{-- The hall as the venue's floor plan, markers only (no walls): the entrance at the top (the back of the
+                     hall, where you walk left or right to the aisles), rows J down to A, and the screen at the bottom.
+                     An exit on each side in line with row B, the second row from the screen. 10 × 12 = 120 seats.
                      Everything but the seats is for orientation only (aria-hidden). --}}
                 <div class="hall">
-                    <div class="screen-bar" aria-hidden="true">Screen</div>
+                    <div class="hall__entrance" aria-hidden="true">
+                        <x-arrow dir="left" />
+                        <span class="entrance-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21h16M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17"/><circle cx="14.5" cy="12" r="1" fill="currentColor"/></svg>Entrance</span>
+                        <x-arrow />
+                    </div>
                     <div class="seat-grid">
-                        @foreach ($rows as $row => $rowSeats)
+                        @foreach ($rows->reverse() as $row => $rowSeats)
                             <div class="seat-row">
-                                <span class="seat-row__side" aria-hidden="true">@if ($loop->index === 1)<span class="exit-sign">Exit</span>@endif</span>
+                                <span class="seat-row__side" aria-hidden="true">@if ($row === 'B')<span class="exit-sign">Exit</span>@endif</span>
                                 <span class="seat-row__label" aria-hidden="true">{{ $row }}</span>
                                 @foreach ($rowSeats as $seat)
                                     @php($taken = in_array($seat->seat_id, $takenSeatIds, true))
@@ -43,15 +48,11 @@
                                     </label>
                                 @endforeach
                                 <span class="seat-row__label" aria-hidden="true">{{ $row }}</span>
-                                <span class="seat-row__side" aria-hidden="true">@if ($loop->index === 1)<span class="exit-sign">Exit</span>@endif</span>
+                                <span class="seat-row__side" aria-hidden="true">@if ($row === 'B')<span class="exit-sign">Exit</span>@endif</span>
                             </div>
                         @endforeach
                     </div>
-                    <div class="hall__entrance" aria-hidden="true">
-                        <x-arrow dir="left" />
-                        <span class="entrance-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21h16M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17"/><circle cx="14.5" cy="12" r="1" fill="currentColor"/></svg>Entrance</span>
-                        <x-arrow />
-                    </div>
+                    <div class="screen-bar screen-bar--bottom" aria-hidden="true">Screen</div>
                 </div>
                 <div class="seat-legend" aria-hidden="true">
                     <span><i></i>Available</span>
@@ -70,7 +71,7 @@
         </form>
     @else
         {{-- Step 2: "Who's coming?" — one card per seat; the first seat is the primary booker. --}}
-        <form method="POST" action="{{ route('bookings.store', $screening) }}" class="booking">
+        <form method="POST" action="{{ route('bookings.review', $screening) }}" class="booking">
             @csrf
             @foreach ($selected as $seat)
                 <input type="hidden" name="seat_ids[]" value="{{ $seat->seat_id }}">
@@ -78,7 +79,7 @@
 
             <div class="booking__main">
                 <h1 class="booking__title">Who's coming?</h1>
-                <p class="muted small booking__lead">One person per seat. Seat {{ $selected->first()->seat_label }} is you, the primary booker: your booking reference and e-ticket go to your email.</p>
+                <p class="muted small booking__lead">One person per seat. Your e-ticket goes to seat {{ $selected->first()->seat_label }}'s email.</p>
                 @foreach ($selected as $seat)
                     @include('public.bookings._attendee-fields', ['seat' => $seat, 'primary' => $loop->first, 'booker' => $selected->first()])
                 @endforeach
@@ -87,10 +88,8 @@
             <aside class="booking__side summary" aria-labelledby="summary-title">
                 @include('public.bookings._summary', ['screening' => $screening, 'seatLabels' => $selected->pluck('seat_label')])
                 <div class="summary__actions">
-                    <button type="submit" class="btn btn--gold btn--block btn--lg">{{ $screening->isPaid() ? 'Continue to payment' : 'Submit reservation' }} <x-arrow class="arrow" /></button>
-                    <p class="muted small booking__hint">
-                        {{ $screening->isPaid() ? 'Seats are held for '.\App\Models\Reservation::PAYMENT_WINDOW_MINUTES.' minutes while you pay.' : 'Staff approve free reservations; your e-ticket is then emailed.' }}
-                    </p>
+                    <button type="submit" class="btn btn--gold btn--block btn--lg">Review booking <x-arrow class="arrow" /></button>
+                    <p class="muted small booking__hint"><span class="req" aria-hidden="true">*</span> Required</p>
                 </div>
             </aside>
         </form>

@@ -19,13 +19,9 @@ class DashboardController extends Controller
         $withCounts = [
             'heldSeats as reserved_count',
             'reservationSeats as admitted_count' => fn ($q) => $q->whereHas('attendance'),
-            'reservations as pending_count' => fn ($q) => $q->where('status', 'pending'),
+            'reservations as pending_count' => fn ($q) => $q->where('status', 'awaiting_payment'),
         ];
         $bookingList = fn () => Reservation::with('screening', 'payment')->withCount('reservationSeats');
-
-        $toApprove = $bookingList()->where('status', 'pending')->doesntHave('payment')
-            ->whereHas('screening', fn ($q) => $q->whereDate('event_date', '>=', today()))
-            ->orderBy('reservation_datetime')->limit(8)->get();
 
         // Paid but cancelled (staff cancel, or paid after expiry): money to return outside the system.
         $refunds = $bookingList()->where('status', 'cancelled')
@@ -38,16 +34,13 @@ class DashboardController extends Controller
                 ->whereDate('event_date', '>', today())->whereDate('event_date', '<=', today()->addDays(7))
                 ->orderBy('event_date')->orderBy('start_time')->get(),
             'next' => Screening::whereDate('event_date', '>', today()->addDays(7))->orderBy('event_date')->orderBy('start_time')->first(),
-            'toApprove' => $toApprove,
-            'toApproveTotal' => Reservation::where('status', 'pending')->doesntHave('payment')
-                ->whereHas('screening', fn ($q) => $q->whereDate('event_date', '>=', today()))->count(),
             'refunds' => $refunds,
             // Not repeated: bookings already listed under "Needs your action" are left out.
-            'recent' => $bookingList()->whereNotIn('reservation_id', $toApprove->pluck('reservation_id')->merge($refunds->pluck('reservation_id')))
+            'recent' => $bookingList()->whereNotIn('reservation_id', $refunds->pluck('reservation_id'))
                 ->orderByDesc('reservation_datetime')->limit(5)->get(),
             'summary' => [
                 'upcoming' => Screening::whereDate('event_date', '>=', today())->count(),
-                'awaiting_payment' => Reservation::where('status', 'pending')->has('payment')->count(),
+                'awaiting_payment' => Reservation::where('status', 'awaiting_payment')->count(),
                 'paid_7d' => (float) Payment::where('status', 'verified')->where('paid_at', '>=', now()->subDays(7))->sum('amount'),
             ],
             'paymentsEnabled' => filled(config('services.paymongo.secret_key')),

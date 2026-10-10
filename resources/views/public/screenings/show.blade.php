@@ -36,6 +36,14 @@
     <div class="filmpage">
         <x-crumbs :items="['Screenings' => route('home'), $screening->event_title => null]" />
 
+        @if (! empty($preview['film']))
+            {{-- Staff preview: the poster card as it appears on the home page. --}}
+            <section class="preview-card" aria-label="Home page card">
+                <span class="eyebrow">Home page card</span>
+                <div class="showcase__grid">@include('public.screenings._film-card', ['film' => $preview['film']])</div>
+            </section>
+        @endif
+
         <div class="filmpage__hero">
             <div class="filmpage__poster">
                 <x-poster :screening="$screening" />

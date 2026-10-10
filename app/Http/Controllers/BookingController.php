@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreReservationRequest;
 use App\Models\Reservation;
+use App\Models\ReservationSeat;
 use App\Models\Screening;
 use App\Models\Seat;
 use App\Services\PayMongo\PayMongoException;
@@ -17,10 +18,10 @@ use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
- * Public reservation flow: pick seats -> declare one attendee per seat -> submit.
- * Every new reservation starts "pending":
- *   paid screenings  -> PayMongo checkout -> confirmed only when PayMongo reports it paid
- *   free screenings  -> confirmed when staff approve it
+ * Public reservation flow: pick seats -> declare one attendee per seat -> review -> submit.
+ * Reservations are approved automatically (no staff approval):
+ *   free screenings  -> confirmed on submit, e-ticket emailed straight away
+ *   paid screenings  -> awaiting_payment -> PayMongo checkout -> confirmed when PayMongo reports it paid
  */
 class BookingController extends Controller
 {
@@ -30,6 +31,8 @@ class BookingController extends Controller
      */
     public function create(Request $request, Screening $screening): View|RedirectResponse
     {
+        abort_if($screening->isDraft(), 404);
+
         if ($screening->event_date->lt(today())) {
             return redirect()->route('screenings.show', $screening)
                 ->withErrors(['seat_ids' => 'This screening has already taken place.']);
@@ -67,8 +70,46 @@ class BookingController extends Controller
         ]);
     }
 
-    public function store(StoreReservationRequest $request, Screening $screening, ReservationMailer $mailer): RedirectResponse
+    /**
+     * Step 3, Review booking (compulsory): the validated details, read-only, with each ticket's price
+     * (20% off for PWD / Senior Citizen IDs). "Edit details" goes back to step 2 with everything kept;
+     * "Confirm" posts the same data to store() with reviewed=1.
+     */
+    public function review(StoreReservationRequest $request, Screening $screening): View|RedirectResponse
     {
+        abort_if($screening->isDraft(), 404);
+
+        $data = $request->validated();
+        $seatIds = array_map('intval', $data['seat_ids']);
+
+        if ($request->boolean('edit')) {
+            return redirect()->route('bookings.create', [$screening, 'seats' => $seatIds])->withInput();
+        }
+
+        $seats = Seat::whereIn('seat_id', $seatIds)->get()
+            ->sortBy(fn ($seat) => array_search($seat->seat_id, $seatIds, true))->values();
+        $tickets = $seats->map(fn (Seat $seat) => [
+            'seat' => $seat,
+            'attendee' => $data['attendees'][$seat->seat_id],
+            ...ReservationSeat::priceFor($screening, $data['attendees'][$seat->seat_id]),
+        ]);
+
+        return view('public.bookings.review', [
+            'screening' => $screening,
+            'tickets' => $tickets,
+            'total' => round($tickets->sum('amount_due'), 2),
+        ]);
+    }
+
+    public function store(StoreReservationRequest $request, Screening $screening, ReservationMailer $mailer): View|RedirectResponse
+    {
+        abort_if($screening->isDraft(), 404);
+
+        // The Review step is compulsory: an unreviewed submission is shown the review page first.
+        if (! $request->boolean('reviewed')) {
+            return $this->review($request, $screening);
+        }
+
         $data = $request->validated();
         $seatIds = array_map('intval', $data['seat_ids']);
         $leadSeatId = isset($data['lead_seat_id']) ? (int) $data['lead_seat_id'] : null;
@@ -85,8 +126,8 @@ class BookingController extends Controller
                 $reservation = Reservation::create([
                     'screening_id' => $screening->screening_id,
                     'booking_reference' => Reservation::generateBookingReference(),
-                    // Pending until PayMongo confirms payment (paid) or staff approve it (free).
-                    'status' => 'pending',
+                    // Auto-approved: free bookings are confirmed now; paid ones once PayMongo confirms payment.
+                    'status' => $screening->isPaid() ? 'awaiting_payment' : 'confirmed',
                     'reservation_datetime' => now(),
                     'lead_first_name' => $data['lead_first_name'],
                     'lead_middle_name' => $data['lead_middle_name'] ?? null,
@@ -95,13 +136,18 @@ class BookingController extends Controller
                     'lead_email' => $data['lead_email'],
                 ]);
 
+                $total = 0;
                 foreach ($seatIds as $seatId) {
+                    $attendee = $data['attendees'][$seatId];
+                    $price = ReservationSeat::priceFor($screening, $attendee);
+                    $total += $price['amount_due'];
+
                     $reservationSeat = $reservation->reservationSeats()->create([
                         'screening_id' => $screening->screening_id,
                         'seat_id' => $seatId,
+                        ...$price,
                     ]);
 
-                    $attendee = $data['attendees'][$seatId];
                     $reservationSeat->attendee()->create([
                         'is_lead_reserver' => $leadSeatId === $seatId,
                         'first_name' => $attendee['first_name'],
@@ -121,7 +167,8 @@ class BookingController extends Controller
                 if ($screening->isPaid()) {
                     // Business rule 11: payment starts pending; it is never assumed verified.
                     $reservation->payment()->create([
-                        'amount' => round((float) $screening->price * count($seatIds), 2),
+                        // The sum of the tickets, after any PWD / Senior Citizen discounts.
+                        'amount' => round($total, 2),
                         'status' => 'pending',
                     ]);
                 }
@@ -139,18 +186,23 @@ class BookingController extends Controller
         }
 
         // After the transaction: an email problem must never undo the booking.
-        $emailed = $mailer->pending($reservation);
-        $note = $emailed ? ' A copy was sent to '.$reservation->lead_email.'.'
-            : ' We could not send the confirmation email, so please save your booking reference.';
+        // Paid: the "complete your payment" email. Free: confirmed already, so the e-ticket.
+        $emailed = $screening->isPaid() ? $mailer->pending($reservation) : $mailer->approved($reservation);
 
         if ($screening->isPaid()) {
+            $note = $emailed ? ' A copy was sent to '.$reservation->lead_email.'.'
+                : ' We could not send the confirmation email, so please save your booking reference.';
+
             // Straight on to payment: one less click for the customer.
             return redirect()->route('bookings.pay', $reservation)
                 ->with('status', 'Reservation '.$reservation->booking_reference.' is held. Complete payment to receive your e-ticket.'.$note);
         }
 
+        $note = $emailed ? ' Your e-ticket has been emailed to '.$reservation->lead_email.'.'
+            : ' We could not email your e-ticket, so please save your booking reference or this page.';
+
         return redirect()->route('bookings.show', $reservation)
-            ->with('booked', true)->with('status', 'Reservation '.$reservation->booking_reference.' received. Your e-ticket will be emailed once staff approve it.'.$note);
+            ->with('booked', true)->with('status', 'Reservation '.$reservation->booking_reference.' is confirmed.'.$note);
     }
 
     /** Send the customer to PayMongo's hosted checkout (reusing an open session). */
@@ -260,7 +312,7 @@ class BookingController extends Controller
         return view('public.bookings.ticket', [
             'reservation' => $reservation,
             'payment' => $reservation->payment,
-            'canPay' => $reservation->payment && ! $reservation->payment->isPaid() && $reservation->status === 'pending',
+            'canPay' => $reservation->payment && ! $reservation->payment->isPaid() && $reservation->status === 'awaiting_payment',
         ]);
     }
 
@@ -273,8 +325,8 @@ class BookingController extends Controller
         return view('public.bookings.show', [
             'reservation' => $reservation,
             'payment' => $payment,
-            'canPay' => $payment && ! $payment->isPaid() && $reservation->status === 'pending',
-            'payBy' => $reservation->status === 'pending' ? $reservation->paymentDeadline() : null,
+            'canPay' => $payment && ! $payment->isPaid() && $reservation->status === 'awaiting_payment',
+            'payBy' => $reservation->status === 'awaiting_payment' ? $reservation->paymentDeadline() : null,
             'paymentsEnabled' => $payments->isConfigured(),
             'paymentCancelled' => $request->query('payment') === 'cancelled',
         ]);

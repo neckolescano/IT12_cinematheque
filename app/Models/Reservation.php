@@ -16,7 +16,11 @@ class Reservation extends Model
 {
     use HasFactory;
 
-    public const STATUSES = ['pending', 'confirmed', 'cancelled'];
+    /**
+     * Approved automatically (revision phase 2): a free booking is confirmed on submit; a paid one is
+     * awaiting_payment (seats held) until PayMongo reports it paid, then confirmed.
+     */
+    public const STATUSES = ['awaiting_payment', 'confirmed', 'cancelled'];
 
     /** staff = cancelled by Cinematheque staff; payment_expired = paid screening not paid in time. */
     public const CANCELLATION_REASONS = ['staff', 'payment_expired'];
@@ -34,7 +38,7 @@ class Reservation extends Model
     ];
 
     protected $attributes = [
-        'status' => 'pending',
+        'status' => 'confirmed',
     ];
 
     protected function casts(): array
@@ -92,17 +96,16 @@ class Reservation extends Model
             $this->status === 'cancelled' && $payment?->isPaid() => ['Refund due', 'error'],
             $this->wasExpired() => ['Expired · not paid', 'neutral'],
             $this->status === 'cancelled' => ['Cancelled', 'neutral'],
-            $this->status === 'confirmed' => [$payment ? 'Approved · paid' : 'Approved', 'success'],
-            (bool) $payment => ['Awaiting payment', 'warning'],
-            default => ['Awaiting approval', 'warning'],
+            $this->status === 'confirmed' => [$payment ? 'Confirmed · paid' : 'Confirmed', 'success'],
+            default => ['Awaiting payment', 'warning'],
         };
     }
 
-    /** UI wording: confirmed shows as "approved"; an unpaid booking that lapsed as "expired". */
+    /** UI wording: an unpaid booking that lapsed shows as "expired". */
     public function statusLabel(): string
     {
         return match (true) {
-            $this->status === 'confirmed' => 'approved',
+            $this->status === 'awaiting_payment' => 'awaiting payment',
             $this->wasExpired() => 'expired',
             default => $this->status,
         };

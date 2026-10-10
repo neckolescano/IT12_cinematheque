@@ -9,6 +9,7 @@ use App\Models\Reservation;
 use App\Models\Screening;
 use App\Models\Seat;
 use App\Models\User;
+use App\Services\ReservationMailer;
 use Database\Seeders\SeatSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
@@ -32,6 +33,7 @@ class ReservationEmailTest extends TestCase
     {
         $seat = Seat::first();
         $this->post(route('bookings.store', $screening), [
+            'reviewed' => 1,
             'seat_ids' => [$seat->seat_id],
             'lead_first_name' => 'Ana', 'lead_last_name' => 'Santos', 'lead_contact_no' => '09171234567',
             'lead_email' => 'ana@example.test', 'lead_seat_id' => $seat->seat_id,
@@ -39,17 +41,27 @@ class ReservationEmailTest extends TestCase
         ]);
     }
 
-    public function test_new_booking_sends_the_pending_email_to_the_booker(): void
+    public function test_free_booking_is_confirmed_at_once_and_emails_the_e_ticket(): void
     {
         Mail::fake();
         $this->book(Screening::factory()->create());
 
+        Mail::assertSent(ReservationApprovedMail::class, fn ($m) => $m->hasTo('ana@example.test'));
+        Mail::assertNotSent(ReservationPendingMail::class);
+    }
+
+    public function test_paid_booking_emails_the_payment_link_not_the_e_ticket(): void
+    {
+        Mail::fake();
+        $this->book(Screening::factory()->paid(150)->create());
+
         Mail::assertSent(ReservationPendingMail::class, fn ($m) => $m->hasTo('ana@example.test'));
+        Mail::assertNotSent(ReservationApprovedMail::class);
     }
 
     public function test_paid_pending_email_contains_the_payment_link(): void
     {
-        $reservation = Reservation::factory()->for(Screening::factory()->paid(150))->pending()->withSeats(1)->create();
+        $reservation = Reservation::factory()->for(Screening::factory()->paid(150))->awaitingPayment()->withSeats(1)->create();
         $reservation->payment()->create(['amount' => 150, 'status' => 'pending']);
 
         $html = (new ReservationPendingMail($reservation))->render();
@@ -59,14 +71,13 @@ class ReservationEmailTest extends TestCase
         $this->assertStringContainsString('AWAITING PAYMENT', $html);
     }
 
-    public function test_approving_sends_the_e_ticket_with_the_booking_details(): void
+    public function test_the_e_ticket_has_the_booking_details(): void
     {
         Mail::fake();
         $screening = Screening::factory()->create(['event_title' => 'Himala', 'start_time' => '19:00']);
-        $reservation = Reservation::factory()->for($screening)->pending()->withSeats(2)->create();
+        $reservation = Reservation::factory()->for($screening)->withSeats(2)->create();
 
-        $this->actingAs(User::factory()->create())->patch(route('staff.reservations.confirm', $reservation))
-            ->assertSessionHas('status');
+        app(ReservationMailer::class)->approved($reservation);
 
         Mail::assertSent(ReservationApprovedMail::class, function (ReservationApprovedMail $mail) use ($reservation) {
             $html = $mail->render();
@@ -100,12 +111,8 @@ class ReservationEmailTest extends TestCase
         $this->book($screening);
 
         $reservation = Reservation::firstOrFail();
-        $this->assertSame('pending', $reservation->status); // booking saved despite the failure
-        $this->assertStringContainsString('could not send', session('status'));
-
-        $this->actingAs(User::factory()->create())->patch(route('staff.reservations.confirm', $reservation))
-            ->assertSessionHas('warning');
-        $this->assertSame('confirmed', $reservation->fresh()->status);
+        $this->assertSame('confirmed', $reservation->status); // booking saved despite the failure
+        $this->assertStringContainsString('could not email', session('status'));
     }
 
     public function test_staff_can_resend_the_current_email(): void

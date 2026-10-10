@@ -28,6 +28,15 @@ class ReportController extends Controller
 
         [$from, $to] = $this->range($request);
         $view = $request->query('view') === 'demographics' ? 'demographics' : 'attendance';
+        // Summary analytics above both tabs: admitted guests by sex / PWD / Senior, and verified income.
+        $kpis = [
+            ...$this->demographicSummary($from, $to),
+            'income' => (float) Payment::where('status', 'verified')
+                ->whereHas('reservation', fn ($r) => $r->where('status', 'confirmed')
+                    ->whereHas('screening', fn ($s) => $s->whereBetween('event_date', [$from, $to])))
+                ->sum('amount'),
+        ];
+        view()->share('kpis', $kpis);
 
         if ($view === 'demographics') {
             return view('staff.reports.index', [

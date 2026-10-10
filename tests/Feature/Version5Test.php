@@ -26,6 +26,7 @@ class Version5Test extends TestCase
     private function payload(Seat $seat, array $attendee = [], array $lead = []): array
     {
         return array_merge([
+            'reviewed' => 1,
             'seat_ids' => [$seat->seat_id],
             'lead_first_name' => 'Ana', 'lead_last_name' => 'Santos',
             'lead_contact_no' => '09171234567', 'lead_email' => 'ana@example.test',
@@ -59,9 +60,9 @@ class Version5Test extends TestCase
         $this->post(route('bookings.store', $screening), $this->payload($seat, ['age' => '', 'sex' => '', 'company_school' => '', 'contact_no' => '', 'email' => '']))
             ->assertSessionHasErrors([$key.'age', $key.'sex', $key.'company_school', $key.'contact_no', $key.'email']);
 
-        $this->post(route('bookings.store', $screening), $this->payload($seat, ['pwd_id_no' => 'PWD-11-2233']))->assertSessionHasNoErrors();
+        $this->post(route('bookings.store', $screening), $this->payload($seat, ['pwd_id_no' => '11-2402-000-0001234']))->assertSessionHasNoErrors();
         $attendee = ReservationAttendee::firstOrFail();
-        $this->assertSame('PWD-11-2233', $attendee->pwd_id_no);
+        $this->assertSame('11-2402-000-0001234', $attendee->pwd_id_no);
         $this->assertTrue($attendee->pwd_indicator);
         $this->assertNull($attendee->middle_name);
         $this->assertNull($attendee->senior_card_no);
@@ -110,14 +111,16 @@ class Version5Test extends TestCase
         $movie = Movie::factory()->create([
             'title' => 'Himala', 'release_year' => (int) date('Y'),
             'curator_note' => 'A defining performance.', 'trailer_url' => 'https://www.youtube.com/watch?v=abcdefghijk',
+            'logline' => 'A girl in a drought-stricken town claims to see the Virgin Mary.',
         ]);
-        Screening::factory()->create(['movie_id' => $movie->movie_id, 'event_title' => 'Himala', 'event_date' => today()->addDay()]);
+        $screening = Screening::factory()->create(['movie_id' => $movie->movie_id, 'event_title' => 'Himala', 'event_date' => today()->addDay()]);
 
         $this->get(route('home'))->assertOk()
             ->assertSee('class="spotlight"', false)
-            ->assertSee('A defining performance.')
+            ->assertSee('A girl in a drought-stricken town claims to see the Virgin Mary.') // the logline, in the banner
             ->assertSee("Curator's Pick")
             ->assertSee('data-trailer="https://www.youtube-nocookie.com/embed/abcdefghijk"', false);
+        $this->get(route('screenings.show', $screening))->assertSee('A defining performance.');
 
         $this->assertNull(Movie::make(['trailer_url' => 'https://example.com/trailer.mp4'])->trailerEmbedUrl());
         $this->assertSame('https://player.vimeo.com/video/76979871', Movie::make(['trailer_url' => 'https://vimeo.com/76979871'])->trailerEmbedUrl());
@@ -158,6 +161,7 @@ class Version5Test extends TestCase
         $movie = Movie::factory()->create(['title' => 'Himala', 'runtime_minutes' => 124]);
 
         $this->actingAs($staff)->post(route('staff.screenings.store'), [
+            'program_id' => \App\Models\Program::factory()->create()->program_id,
             'movie_id' => $movie->movie_id, 'event_title' => '', 'event_date' => today()->addDay()->format('Y-m-d'),
             'start_time' => '17:00', 'end_time' => '', 'type' => 'free',
         ])->assertSessionHasNoErrors();
@@ -196,14 +200,18 @@ class Version5Test extends TestCase
             ->assertSee($booking->booking_reference);
     }
 
-    public function test_reservation_quick_filters_and_inline_approval(): void
+    public function test_bookings_live_on_the_screening_roster_with_an_awaiting_payment_filter(): void
     {
         $staff = User::factory()->create();
-        $free = Reservation::factory()->for(Screening::factory())->pending()->withSeats(1)->create();
-        $approved = Reservation::factory()->for(Screening::factory())->withSeats(1)->create(['status' => 'confirmed']);
+        $screening = Screening::factory()->paid(150)->create();
+        $unpaid = Reservation::factory()->for($screening)->awaitingPayment()->withSeats(1)->create();
 
-        $this->actingAs($staff)->get(route('staff.reservations.index', ['view' => 'approve']))->assertOk()
-            ->assertSee($free->booking_reference)->assertDontSee($approved->booking_reference)
-            ->assertSee(route('staff.reservations.confirm', $free), false);
+        // The old Reservations pages redirect to the roster.
+        $this->actingAs($staff)->get(route('staff.reservations.index'))->assertRedirect(route('staff.screenings.index'));
+        $this->get(route('staff.reservations.show', $unpaid))->assertRedirect(route('staff.screenings.show', [$screening, 'open' => $unpaid->booking_reference]).'#booking-'.$unpaid->booking_reference);
+
+        $this->get(route('staff.screenings.show', $screening))->assertOk()
+            ->assertSee($unpaid->booking_reference)->assertSee('data-filter="pending"', false)
+            ->assertSee(route('staff.reservations.resend', $unpaid), false)->assertDontSee('Approve');
     }
 }

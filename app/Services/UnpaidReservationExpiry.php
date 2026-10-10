@@ -22,7 +22,7 @@ class UnpaidReservationExpiry
     /** @return int how many bookings expired */
     public function run(): int
     {
-        $ids = Reservation::where('status', 'pending')
+        $ids = Reservation::where('status', 'awaiting_payment')
             ->where('reservation_datetime', '<=', now()->subMinutes(Reservation::PAYMENT_WINDOW_MINUTES))
             ->whereHas('payment', fn ($q) => $q->where('status', '!=', 'verified'))
             ->pluck('reservation_id');
@@ -37,7 +37,7 @@ class UnpaidReservationExpiry
                     return false;
                 }
 
-                return Reservation::whereKey($id)->where('status', 'pending')->first()?->cancel('payment_expired') ?? false;
+                return Reservation::whereKey($id)->where('status', 'awaiting_payment')->first()?->cancel('payment_expired') ?? false;
             });
         }
 

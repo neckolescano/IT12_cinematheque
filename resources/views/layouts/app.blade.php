@@ -24,6 +24,10 @@
     </div>
 </header>
 
+@if (! empty($preview))
+    @include('partials.preview-bar')
+@endif
+
 @yield('hero')
 
 <main id="main" class="@yield('main_class', 'page')">
@@ -78,8 +82,6 @@
             </nav>
         </div>
     </div>
-    {{-- Full footer width; the letters are filled with the Cinematheque facade photo, toned in brand yellow. --}}
-    <div class="footer-wordmark" aria-hidden="true" style="--wordmark-photo: url('{{ asset('images/about/ccd_facade.jpg') }}')">Cinematheque</div>
     <div class="container site-footer__bottom">
         <p class="site-footer__note">&copy; {{ date('Y') }} Cinematheque Centre Davao · Palma Gil St., Davao City</p>
         <a class="fdcp-badge" href="{{ config('cinematheque.fdcp_url') }}" target="_blank" rel="noopener">

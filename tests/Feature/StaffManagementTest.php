@@ -29,13 +29,14 @@ class StaffManagementTest extends TestCase
     public function test_staff_can_create_screening_and_is_recorded_as_creator(): void
     {
         $this->actingAs($this->staff)->post(route('staff.screenings.store'), [
-            'event_title' => 'Opening Night', 'event_date' => today()->addDay()->toDateString(),
+            'program_id' => \App\Models\Program::factory()->create()->program_id,
+            'film_title' => 'Opening Night', 'event_title' => '', 'event_date' => today()->addDay()->toDateString(),
             'start_time' => '18:00', 'end_time' => '20:00', 'type' => 'paid', 'price' => '200',
         ])->assertRedirect();
 
         $screening = Screening::firstOrFail();
         $this->assertSame($this->staff->user_id, $screening->created_by);
-        $this->assertNull($screening->movie_id);
+        $this->assertSame('Opening Night', $screening->movie->title);
     }
 
     public function test_screening_validation(): void
@@ -75,6 +76,7 @@ class StaffManagementTest extends TestCase
     {
         $reservation = Reservation::factory()->withSeats(2)->create(); // factory default: confirmed
         $seat = $reservation->reservationSeats()->first();
+        $this->travelTo($reservation->screening->startsAt()); // check-in is open
 
         $this->actingAs($this->staff)->post(route('staff.attendances.store', $seat), ['remarks' => 'On time'])
             ->assertRedirect();
@@ -92,6 +94,7 @@ class StaffManagementTest extends TestCase
     {
         $reservation = Reservation::factory()->withSeats(1)->create();
         $seat = $reservation->reservationSeats()->first();
+        $this->travelTo($reservation->screening->startsAt()); // check-in is open
 
         $response = $this->actingAs($this->staff)->postJson(route('staff.attendances.store', $seat))
             ->assertOk()->assertJsonPath('admitted', 1)
@@ -106,9 +109,9 @@ class StaffManagementTest extends TestCase
         $this->assertSame(0, Attendance::count());
     }
 
-    public function test_pending_reservations_cannot_be_admitted(): void
+    public function test_reservations_awaiting_payment_cannot_be_admitted(): void
     {
-        $reservation = Reservation::factory()->pending()->withSeats(1)->create();
+        $reservation = Reservation::factory()->awaitingPayment()->withSeats(1)->create();
 
         $this->actingAs($this->staff)->post(route('staff.attendances.store', $reservation->reservationSeats()->first()))
             ->assertForbidden();
@@ -128,27 +131,6 @@ class StaffManagementTest extends TestCase
         $this->assertStringContainsString($noShow->booking_reference, $html);
         $this->assertSame(1, substr_count($html, 'data-state="admitted"'));
         $this->assertSame(1, substr_count($html, 'data-state="no-show"'));
-    }
-
-    public function test_approve_all_pending_free_reservations(): void
-    {
-        $screening = Screening::factory()->create();
-        Reservation::factory()->count(2)->for($screening)->pending()->withSeats(1)->create();
-
-        $this->actingAs($this->staff)->post(route('staff.screenings.approve-pending', $screening))->assertRedirect();
-
-        $this->assertSame(2, $screening->reservations()->where('status', 'confirmed')->count());
-    }
-
-    public function test_paid_reservations_cannot_be_approved_by_staff(): void
-    {
-        $screening = Screening::factory()->paid()->create();
-        $reservation = Reservation::factory()->for($screening)->pending()->withSeats(1)->create();
-        $reservation->payment()->create(['amount' => 150, 'status' => 'pending']);
-
-        $this->actingAs($this->staff)->patch(route('staff.reservations.confirm', $reservation))->assertForbidden();
-        $this->actingAs($this->staff)->post(route('staff.screenings.approve-pending', $screening))->assertStatus(422);
-        $this->assertSame('pending', $reservation->fresh()->status);
     }
 
     public function test_cancelled_reservation_cannot_be_checked_in(): void
@@ -191,12 +173,17 @@ class StaffManagementTest extends TestCase
         foreach ([
             route('staff.dashboard'), route('staff.screenings.index'), route('staff.screenings.create'),
             route('staff.screenings.show', $screening), route('staff.screenings.edit', $screening),
-            route('staff.reservations.index'), route('staff.reservations.show', $reservation),
-            route('staff.movies.index'), route('staff.movies.create'), route('staff.movies.edit', $movie),
-            route('staff.users.index'), route('staff.users.create'),
+            route('staff.screenings.show', $reservation->screening_id),
+            route('staff.movies.index'), route('staff.movies.create'), route('staff.movies.edit', $movie), route('staff.movies.show', $movie),
+            route('staff.program-reports.index'),
             route('staff.reports.index'), route('bookings.show', $reservation), route('home'),
         ] as $url) {
             $this->actingAs($this->staff)->get($url)->assertOk();
+        }
+
+        $superAdmin = \App\Models\User::where('role', 'super_admin')->firstOrFail();
+        foreach ([route('staff.users.index'), route('staff.users.create'), route('staff.program-reports.index')] as $url) {
+            $this->actingAs($superAdmin)->get($url)->assertOk();
         }
     }
 }

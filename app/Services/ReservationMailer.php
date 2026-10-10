@@ -17,12 +17,13 @@ use Illuminate\Support\Facades\Mail;
  */
 class ReservationMailer
 {
+    /** A paid booking's seats are held: pay by the deadline (link inside). */
     public function pending(Reservation $reservation): bool
     {
         return $this->send($reservation, new ReservationPendingMail($reservation), 'pending');
     }
 
-    /** "Approved" and the e-ticket are the same email. */
+    /** "Confirmed" and the e-ticket are the same email. */
     public function approved(Reservation $reservation): bool
     {
         return $this->send($reservation, new ReservationApprovedMail($reservation), 'approved');

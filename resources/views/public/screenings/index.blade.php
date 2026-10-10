@@ -11,6 +11,9 @@
     {{-- Full-width looping spotlight straight under the header, on the page background (no band behind it). --}}
     @if ($featured->isNotEmpty())
         @include('public.screenings._spotlight')
+        <div class="container spotlight-cta">
+            <a class="btn btn--secondary" href="#showcase">See full schedule <x-arrow class="arrow" /></a>
+        </div>
     @endif
 @endsection
 

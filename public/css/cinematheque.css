@@ -66,6 +66,7 @@ p { margin: 0 0 12px; }
 .money { font-family: var(--font-display); font-weight: 600; letter-spacing: .01em; }
 .ref { font-family: var(--font-display); font-weight: 600; letter-spacing: .08em; }
 .optional { font-weight: 400; color: var(--faint); font-size: 12px; margin-left: 4px; }
+.req { color: var(--danger); font-weight: 700; margin-left: 2px; }
 .page { padding: 28px 0 72px; }
 .page--narrow .container { max-width: calc(620px + 2 * var(--gutter)); }
 .section-gap { margin-top: 48px; }
@@ -117,21 +118,8 @@ p { margin: 0 0 12px; }
 .site-footer__cols ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; font-size: 15px; color: var(--text); }
 .site-footer__cols a { color: var(--text); }
 .site-footer__cols a:hover { color: var(--gold-text); text-decoration: underline; text-decoration-color: var(--gold); text-underline-offset: 4px; }
-/* The wordmark: CINEMATHEQUE across the full footer width (container units of the footer), its letters filled with
-   the Cinematheque facade photo, slowly panning. Light theme: dark ink with the photo as a subtle texture (yellow on
-   cream is too low-contrast). Dark theme: the photo toned in brand gold, with a soft glow.
-   Line height above 1 so no glyph overflows its box (clipped text only paints inside the box). */
-.footer-wordmark { margin: 36px 0 22px; padding: 0 2cqi; font: 600 15.4cqi/1.12 var(--font-display); letter-spacing: -.005em; text-transform: uppercase; text-align: center; white-space: nowrap; user-select: none; color: transparent;
-    --wm-tone: linear-gradient(100deg, #121212 0%, #2a2418 50%, #121212 100%); /* light page: near-black ink */
-    background: var(--wordmark-photo, none) 50% 30% / cover no-repeat, var(--wm-tone);
-    background-blend-mode: soft-light, normal;
-    -webkit-background-clip: text; background-clip: text;
-    animation: wordmark-pan 40s ease-in-out infinite alternate; }
-:root[data-theme="dark"] .footer-wordmark { --wm-tone: linear-gradient(100deg, #cc8500 0%, #ffcc00 28%, #ffe27a 50%, #ebbc00 72%, #cc8500 100%); filter: drop-shadow(0 12px 28px rgba(204, 133, 0, .22)); }
-@keyframes wordmark-pan { from { background-position: 50% 22%, 0 0; } to { background-position: 50% 68%, 0 0; } }
-@media (prefers-reduced-motion: reduce) { .footer-wordmark { animation: none; } }
 /* Bottom bar: copyright left, the FDCP badge right */
-.site-footer__bottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+.site-footer__bottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px 24px; margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--border); }
 .site-footer__note { margin: 0; font-size: 12.5px; color: var(--faint); }
 @media (max-width: 760px) {
     .site-footer__top { grid-template-columns: 1fr; }
@@ -238,7 +226,7 @@ p { margin: 0 0 12px; }
 .crumbs a { color: var(--muted); }
 .crumbs a:hover { color: var(--link); }
 .crumbs [aria-current="page"] { color: var(--text); font-weight: 600; }
-.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; list-style: none; margin: 0 0 24px; padding: 0; }
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; list-style: none; margin: 0 0 24px; padding: 0; }
 .steps li { font-size: 12px; font-weight: 500; color: var(--faint); }
 .steps li::before { content: ""; display: block; height: 4px; margin-bottom: 6px; border-radius: 4px; background: var(--border); }
 .steps li.is-done { color: var(--text); }
@@ -288,6 +276,15 @@ p { margin: 0 0 12px; }
 .summary__total { display: flex; justify-content: space-between; align-items: baseline; padding-top: 12px; border-top: 1px dashed var(--perforation); color: var(--muted); font-size: 13.5px; }
 .summary__total strong { font-size: 22px; color: var(--text); }
 .summary__actions { display: grid; gap: 10px; padding: 16px 20px 20px; }
+.summary__off { margin-left: 4px; padding: 1px 6px; border-radius: var(--r-pill); background: var(--gold); color: #141219; font-size: 10.5px; font-weight: 700; }
+.summary__note { margin: 10px 0 0; }
+/* Review step: one read-only card per ticket. */
+.review-card { padding-bottom: 14px; }
+.review-card__price { margin-left: auto; font-weight: 700; font-size: 15px; }
+.review-card__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px 20px; margin: 0; font-size: 14px; }
+.review-card__grid dt { font-size: 11.5px; color: var(--faint); }
+.review-card__grid dd { margin: 2px 0 0; font-weight: 500; overflow-wrap: anywhere; }
+.pill--discount { background: var(--gold); color: #141219; }
 
 /* Seat map: 10 rows × 12 seats, sized to fit without scrolling on a laptop */
 .seat-map { padding: 18px 20px 16px; background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--shadow); }
@@ -315,7 +312,9 @@ p { margin: 0 0 12px; }
 .hall .screen-bar { width: 86%; margin-bottom: 24px; }
 .seat-row__side { display: grid; place-items: center; }
 .exit-sign { display: inline-grid; place-items: center; padding: 4px 6px; border-radius: 4px; background: var(--exit); color: #fff; font: 700 9px/1 var(--font); letter-spacing: .12em; text-transform: uppercase; box-shadow: 0 0 0 3px color-mix(in srgb, var(--exit) 18%, transparent); }
-.hall__entrance { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 22px; color: var(--faint); }
+.hall__entrance { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 22px; color: var(--faint); }
+/* Floor plan orientation: the screen sits below row A, so its arc curves the other way. */
+.hall .screen-bar--bottom { margin: 24px auto 0; padding: 0 0 6px; border-top: 0; border-bottom: 4px solid var(--gold); border-radius: 0 0 50% 50% / 0 0 14px 14px; }
 .hall__entrance .icon-arrow { width: 18px; height: 18px; }
 .entrance-mark { display: inline-flex; align-items: center; gap: 7px; padding: 6px 14px; border: 1.5px solid var(--border-strong); border-radius: var(--r-pill); background: var(--surface); color: var(--text); font-size: 10.5px; font-weight: 600; letter-spacing: .2em; text-transform: uppercase; }
 .entrance-mark svg { width: 15px; height: 15px; flex: none; }
@@ -359,6 +358,7 @@ p { margin: 0 0 12px; }
 .field input:focus, .field select:focus { outline: none; border-color: var(--gold-600); box-shadow: 0 0 0 3px rgba(235, 188, 0, .25); }
 .field.has-error input, .field.has-error .phone { border-color: var(--danger); }
 .field__error { font-size: 12px; color: var(--danger); }
+.field__hint { font-size: 11.5px; color: var(--faint); }
 .phone { display: flex; height: 40px; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: var(--surface); overflow: hidden; }
 .phone:focus-within { border-color: var(--gold-600); box-shadow: 0 0 0 3px rgba(235, 188, 0, .25); }
 .phone__prefix { display: grid; place-items: center; padding: 0 10px; background: var(--neutral); border-right: 1px solid var(--border-strong); font-weight: 600; font-size: 14px; color: var(--text); }
@@ -699,6 +699,7 @@ dialog.modal::backdrop { background: rgba(20, 18, 25, .5); }
 .spotlight__tags .sc-tag { border-color: #e9c766; background: #fff7e1; color: #8a5a00; }
 .spotlight__note { margin: 2px 0 0; font-size: 15px; line-height: 1.6; color: var(--sp-soft); }
 .spotlight__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.spotlight-cta { display: flex; justify-content: center; margin-top: 18px; }
 .spotlight__poster { position: relative; display: block; width: clamp(160px, 17vw, 228px); margin: 0 14px 14px 0; }
 .spotlight__poster::before { content: ""; position: absolute; inset: 14px -14px -14px 14px; border-radius: var(--r-md); background: var(--sp-mark); }
 .spotlight__poster .poster { border-radius: var(--r-md); box-shadow: 0 24px 48px -18px var(--sp-poster-shadow); transition: transform .5s var(--ease); }
@@ -783,6 +784,16 @@ dialog.modal::backdrop { background: rgba(20, 18, 25, .5); }
 .showcase__empty { padding: 28px 20px; border: 1px dashed var(--border-strong); border-radius: var(--r-lg); text-align: center; color: var(--muted); }
 
 /* Grid of poster cards (auto-fills; a swipe carousel on phones, below) */
+/* Staff preview of a draft: a sticky bar above the customer page, and the home page card above the film page. */
+.preview-bar { position: sticky; top: 0; z-index: 60; background: #141219; color: #fff; border-bottom: 3px solid var(--gold); }
+.preview-bar__inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; padding-block: 10px; }
+.preview-bar__text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13.5px; }
+.preview-bar__text strong { color: var(--gold); letter-spacing: .14em; text-transform: uppercase; font-size: 12px; }
+.preview-bar__actions { display: flex; gap: 8px; align-items: center; }
+.preview-bar__actions form { margin: 0; }
+.preview-bar .btn--ghost { color: #fff; background: transparent; border: 1px solid rgba(255, 255, 255, .35); }
+.preview-card { margin: 0 0 32px; padding-bottom: 28px; border-bottom: 1px dashed var(--border); }
+.preview-card .showcase__grid { max-width: 230px; margin-top: 10px; }
 .showcase__grid { display: grid; gap: 34px 22px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 
 /* Film card: one link (the title's, stretched over the whole card). Hover/focus: the poster zooms in slightly. */

@@ -1,11 +1,11 @@
 @extends('layouts.staff')
 
-@section('title', 'Attendance')
+@section('title', 'Screenings & check-in')
 
 @section('content')
     <header class="page-head">
         <div>
-            <h1>Attendance</h1>
+            <h1>Screenings &amp; check-in</h1>
         </div>
     </header>
 

@@ -10,7 +10,7 @@
 
     <div class="page-head">
         <div>
-            <a class="back-link" href="{{ route('staff.movies.index') }}"><x-arrow dir="left" /> Film catalog</a>
+            <a class="back-link" href="{{ $editing ? route('staff.movies.show', $movie) : route('staff.movies.index') }}"><x-arrow dir="left" /> {{ $editing ? $movie->title : 'Film catalog' }}</a>
             <h1>{{ $editing ? 'Edit film' : 'Add film' }}</h1>
         </div>
     </div>
@@ -72,6 +72,12 @@
                                 </div>
                             </div>
                             @include('staff.partials.genre-field', ['p' => 'movie', 'movie' => $editing ? $movie : null])
+
+                            {{-- A film can be in several programs (a festival may screen it again). --}}
+                            @include('staff.partials.program-tags', [
+                                'chosen' => collect(old('programs', $movie->programs->pluck('name')->all()))->map(fn ($n) => App\Models\Program::clean($n))->filter()->unique(fn ($n) => mb_strtolower($n))->values(),
+                                'suggestions' => $programs,
+                            ])
                         </div>
                     </div>
                 </section>
@@ -87,6 +93,12 @@
                 {{-- Shown on the public home page: the poster card, the spotlight and the trailer button. --}}
                 <section class="panel">
                     <h2 class="panel__title">Programme notes</h2>
+                    <div class="field @error('logline') has-error @enderror">
+                        <label for="logline">Logline</label>
+                        <input type="text" id="logline" name="logline" maxlength="200" value="{{ old('logline', $movie->logline) }}" aria-describedby="logline-hint">
+                        <p class="hint" id="logline-hint">Shown on the home banner. If blank, the synopsis's first sentence is used.</p>
+                        @error('logline') <span class="field__error">{{ $message }}</span> @enderror
+                    </div>
                     <div class="field @error('curator_note') has-error @enderror">
                         <label for="curator_note">Curator's note</label>
                         <input type="text" id="curator_note" name="curator_note" maxlength="200" value="{{ old('curator_note', $movie->curator_note) }}" placeholder="e.g. Nora Aunor's defining performance, newly restored in 4K." aria-describedby="curator-hint">
@@ -117,15 +129,27 @@
                     </div>
                     <p class="hint" style="margin:0">Separate names with commas.</p>
                 </section>
-                <div class="form-footer">
+                {{-- Save as draft (staff only) · Review (the customer page as it will look) · Publish --}}
+                <section class="panel">
+                    <h2 class="panel__title">Publishing</h2>
+                    <p class="status-line">
+                        @if ($movie->isDraft())<span class="state state--warning">Draft</span> Customers can't see this film.
+                        @else<span class="state state--success">Published</span> Live on the customer site.@endif
+                    </p>
+                    <div class="save-actions">
+                        <button type="submit" name="intent" value="publish" class="btn btn--primary btn--block">{{ $editing && ! $movie->isDraft() ? 'Save and keep published' : 'Publish' }}</button>
+                        <div class="save-actions__row">
+                            <button type="submit" name="intent" value="draft" class="btn btn--secondary" formnovalidate>Save as draft</button>
+                            <button type="submit" name="intent" value="review" class="btn btn--secondary">Review</button>
+                        </div>
+                        <a class="btn btn--ghost btn--block" href="{{ $editing ? route('staff.movies.show', $movie) : route('staff.movies.index') }}">Cancel</a>
+                    </div>
                     @if ($editing)
                         @can('delete', $movie)
-                            <button type="submit" form="delete-film" class="btn btn--danger form-footer__left">Delete film</button>
+                            <button type="submit" form="delete-film" class="btn btn--danger btn--block" style="margin-top:14px">Delete film</button>
                         @endcan
                     @endif
-                    <a class="btn btn--secondary" href="{{ route('staff.movies.index') }}">Cancel</a>
-                    <button type="submit" class="btn btn--primary">{{ $editing ? 'Save changes' : 'Add film' }}</button>
-                </div>
+                </section>
             </aside>
         </div>
     </form>

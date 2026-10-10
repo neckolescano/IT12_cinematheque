@@ -2,59 +2,52 @@
 
 @section('title', 'Film catalog')
 
+{{-- Poster tiles grouped by program, with program filter chips on top. A tile opens the film's panel. --}}
 @section('content')
     <div class="page-head">
         <div>
             <h1>Film catalog</h1>
-            <p>{{ $movies->total() }} {{ Str::plural('film', $movies->total()) }}</p>
+            <p>{{ $total }} {{ Str::plural('film', $total) }}{{ $current instanceof App\Models\Program ? ' in '.$current->name : ($current === 'none' ? ' not in a program' : '') }}</p>
         </div>
         @can('create', App\Models\Movie::class)
-            <a class="btn btn--primary" href="{{ route('staff.movies.create') }}">Add film</a>
+            <a class="btn btn--primary" href="{{ route('staff.movies.create', $current instanceof App\Models\Program ? ['program' => $current->program_id] : []) }}">Add film</a>
         @endcan
     </div>
 
-    @if ($movies->isEmpty())
-        <x-empty title="No films yet" />
-    @else
-        {{-- One row per film: film (rating beneath) · runtime · genre · director · year · screenings · Schedule. --}}
-        <div class="table-wrap">
-            <table class="table films">
-                <thead>
-                <tr><th>Film</th><th>Runtime</th><th>Genre</th><th>Director</th><th>Year</th><th class="center">Screenings</th><th class="actions">Actions</th></tr>
-                </thead>
-                <tbody>
-                @foreach ($movies as $movie)
-                    <tr @can('update', $movie) data-href="{{ route('staff.movies.edit', $movie) }}" @endcan>
-                        <td>
-                            <div class="film-cell">
-                                @if ($movie->posterUrl())
-                                    <img class="film-cell__poster" src="{{ $movie->posterUrl() }}" alt="" loading="lazy">
-                                @else
-                                    <span class="film-cell__poster" aria-hidden="true"></span>
-                                @endif
-                                <div>
-                                    <a class="cell-title link-quiet" href="{{ route('staff.movies.edit', $movie) }}">{{ $movie->title }}</a>
-                                    @if ($movie->rating)<div class="cell-sub">{{ $movie->rating }}</div>@endif
-                                </div>
-                            </div>
-                        </td>
-                        <td class="nowrap">{{ $movie->runtime_minutes ? $movie->runtime_minutes.' min' : '—' }}</td>
-                        <td>{{ $movie->genres->pluck('genre_name')->join(', ') ?: '—' }}</td>
-                        <td>{{ $movie->directors->pluck('full_name')->join(', ') ?: '—' }}</td>
-                        <td class="num-inline">{{ $movie->release_year ?? '—' }}</td>
-                        <td class="center">{{ $movie->screenings_count }}</td>
-                        <td class="actions">
-                            <div class="row-actions">
-                                @can('create', App\Models\Screening::class)
-                                    <a class="btn btn--secondary btn--sm" href="{{ route('staff.screenings.create', ['movie' => $movie->movie_id]) }}">Schedule</a>
-                                @endcan
-                            </div>
-                        </td>
-                    </tr>
+    <nav class="chips catalog-chips" aria-label="Filter by program">
+        <a href="{{ route('staff.movies.index') }}" @if (! $current) aria-current="page" @endif>All programs</a>
+        @foreach ($programs as $program)
+            <a href="{{ route('staff.movies.index', ['program' => $program->program_id]) }}" @if ($current instanceof App\Models\Program && $current->is($program)) aria-current="page" @endif>
+                {{ $program->name }} <span class="n">{{ $program->movies_count }}</span>
+            </a>
+        @endforeach
+        @if ($unfiled)
+            <a href="{{ route('staff.movies.index', ['program' => 'none']) }}" @if ($current === 'none') aria-current="page" @endif>No program <span class="n">{{ $unfiled }}</span></a>
+        @endif
+    </nav>
+
+    @forelse ($groups as $group)
+        <section class="catalog-group" aria-labelledby="group-{{ $loop->index }}">
+            <div class="catalog-group__head">
+                <h2 id="group-{{ $loop->index }}">{{ $group->program?->name ?? 'No program' }}</h2>
+                <span class="muted small">{{ $group->movies->count() }} {{ Str::plural('film', $group->movies->count()) }}</span>
+            </div>
+            <ul class="poster-grid">
+                @foreach ($group->movies as $movie)
+                    <li>
+                        <a class="poster-tile" href="{{ route('staff.movies.show', $movie) }}">
+                            <span class="poster-tile__frame">
+                                <x-poster :movie="$movie" />
+                                @if ($movie->isDraft())<span class="poster-tile__badge">Draft</span>@endif
+                            </span>
+                            <span class="poster-tile__title">{{ $movie->title }}</span>
+                            <span class="poster-tile__meta">{{ $movie->release_year ?? 'Year —' }} · {{ $movie->screenings_count }} {{ Str::plural('screening', $movie->screenings_count) }}</span>
+                        </a>
+                    </li>
                 @endforeach
-                </tbody>
-            </table>
-        </div>
-        <div class="pagination">{{ $movies->links() }}</div>
-    @endif
+            </ul>
+        </section>
+    @empty
+        <x-empty title="No films here yet" />
+    @endforelse
 @endsection

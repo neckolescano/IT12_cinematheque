@@ -166,14 +166,48 @@
         update();
     }
 
-    /* Mobile numbers: digits only, the 10 after the fixed +63 prefix (9XXXXXXXXX). */
-    document.querySelectorAll('[data-digits]').forEach(function (input) {
+    /* Details step, paid screenings: a PWD or Senior Citizen ID makes that seat's ticket 20% off.
+       Recount regular / discounted tickets and the total as ID numbers are typed (the server prices it again). */
+    var priced = document.querySelector('[data-price-summary]');
+    var people = Array.prototype.slice.call(document.querySelectorAll('[data-person]'));
+    if (priced && people.length) {
+        var full = parseFloat(priced.getAttribute('data-price')) || 0;
+        var off = parseFloat(priced.getAttribute('data-discount-price')) || 0;
+        var peso = function (v) { return '₱' + v.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+        var reprice = function () {
+            var discounted = people.filter(function (p) {
+                return Array.prototype.some.call(p.querySelectorAll('input[name$="[pwd_id_no]"], input[name$="[senior_card_no]"]'), function (i) { return i.value.trim() !== ''; });
+            }).length;
+            var regular = people.length - discounted;
+            priced.querySelectorAll('[data-regular-count]').forEach(function (el) { el.textContent = regular; });
+            priced.querySelectorAll('[data-discount-count]').forEach(function (el) { el.textContent = discounted; });
+            priced.querySelectorAll('[data-discount-row]').forEach(function (el) { el.hidden = discounted === 0; });
+            priced.querySelectorAll('[data-seat-total]').forEach(function (el) { el.textContent = peso(regular * full + discounted * off); });
+        };
+        people.forEach(function (p) { p.addEventListener('input', reprice); });
+        reprice();
+    }
+
+    /* PWD ID numbers: 16 digits shown as RR-PPMM-BBB-NNNNNNN as they are typed. */
+    document.querySelectorAll('[data-pwd-id]').forEach(function (input) {
         input.addEventListener('input', function () {
-            var v = input.value.replace(/\D/g, '');
-            if (v.length > 10 && v.indexOf('63') === 0) v = v.slice(2);       // pasted +639XXXXXXXXX
-            else if (v.length > 10 && v.indexOf('0') === 0) v = v.slice(1);   // pasted 09XXXXXXXXX
-            input.value = v.slice(0, 10);
+            var d = input.value.replace(/\D/g, '').slice(0, 16);
+            var parts = [d.slice(0, 2), d.slice(2, 6), d.slice(6, 9), d.slice(9)].filter(function (p) { return p; });
+            input.value = parts.join('-');
         });
+    });
+
+    /* Mobile numbers: the 10 digits after the fixed +63 prefix, shown as 9XX XXX XXXX. A pasted
+       +63 / 0 prefix is dropped, so the country code never appears twice. */
+    var formatMobile = function (value) {
+        var v = value.replace(/\D/g, '');
+        if (v.length > 10 && v.indexOf('63') === 0) v = v.slice(2);       // pasted +639XXXXXXXXX
+        else if (v.length > 10 && v.indexOf('0') === 0) v = v.slice(1);   // pasted 09XXXXXXXXX
+        v = v.slice(0, 10);
+        return [v.slice(0, 3), v.slice(3, 6), v.slice(6)].filter(function (p) { return p; }).join(' ');
+    };
+    document.querySelectorAll('[data-digits]').forEach(function (input) {
+        input.addEventListener('input', function () { input.value = formatMobile(input.value); });
     });
 
     /* Guests: "Same mobile and email as seat 1" copies (and keeps following) the booker's. */

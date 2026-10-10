@@ -96,8 +96,10 @@ php artisan migrate --seed
 php artisan storage:link
 ```
 
-- `migrate --seed` creates all tables and fills them with demo data: 120 seats, 11 films with posters, screenings from tomorrow onward, sample bookings in every state, and staff accounts.
+- `migrate --seed` creates all tables and fills them with demo data: 120 seats, 4 programs, 11 films with posters, screenings from tomorrow onward, sample bookings in every state, and staff accounts (Admins and the one Super Admin).
 - `storage:link` makes the film posters visible. If it says the link already exists, that's fine.
+
+**Already had the project running before 11 October 2026?** Just run `php artisan migrate`. It adds the revision's tables and columns without losing data: films and screenings go into an "Unassigned" program for you to re-file, pending free bookings become confirmed, pending paid bookings become "awaiting payment", and a screening without a film gets its own film record.
 
 To start over with clean demo data at any time (**this deletes everything in the `cinematheque` database**):
 
@@ -120,10 +122,13 @@ Leave that terminal open, then open:
 | Customer site | http://127.0.0.1:8000/cinemathequecentredavao |
 | Staff (admin) | http://127.0.0.1:8000/ccdadmin |
 
-**Staff logins** (password `password` for all):
-- `avt@cinematheque.test`
-- `pdo@cinematheque.test`
-- `inactive@cinematheque.test` — refused on purpose (a deactivated account)
+**Staff logins** (password `password` for all; change them after the first login):
+- `avt@cinematheque.test`: Admin
+- `pdo@cinematheque.test`: Admin
+- `manila@cinematheque.test`: **Super Admin** (FDCP Manila). The only account that unlocks submitted reports and manages staff accounts
+- `inactive@cinematheque.test`: refused on purpose (a deactivated account)
+
+**Roles:** Admins run films, program tags, schedules, bookings, door check-in (from 20 minutes before a screening until 60 minutes after it ends) and reports, and edit their own account. The one Super Admin can do all of that, and also creates, edits and deactivates staff accounts, unlocks submitted program reports, and can correct a check-in roster at any time. Position (AVT/PDO) is only a job title.
 
 Stop the site with **Ctrl + C** in that terminal. Next time you only need to start MySQL in XAMPP and run `php artisan serve`.
 
@@ -131,11 +136,25 @@ Stop the site with **Ctrl + C** in that terminal. Next time you only need to sta
 
 ## 7. Trying a test payment
 
-1. On the customer site pick a **paid** screening (₱150), choose seats, fill in "Who's coming?" and continue to payment.
-2. On PayMongo's test checkout, choose **GCash** (or Maya) and click **Authorize Test Payment**, or use the test card **4343 4343 4343 4345**, any future expiry date and any 3-digit CVC.
+1. On the customer site pick a **paid** screening (₱150), choose seats, fill in "Who's coming?", check everything on **Review booking**, then **Confirm and pay**. Typing a PWD or Senior Citizen ID for a person makes their ticket 20% off.
+2. On PayMongo's test checkout, choose **GCash** or **Maya** and click **Authorize Test Payment**. Card payments are not offered.
 3. You return to the booking page, which shows "Booking confirmed" and the e-ticket.
 
-Unpaid bookings for paid screenings expire after **15 minutes** and their seats are released.
+Unpaid bookings for paid screenings stay "awaiting payment" for **15 minutes**, then expire and their seats are released. Free screenings need no payment: the booking is confirmed and the e-ticket emailed as soon as it is submitted.
+
+---
+
+## 7b. Program reports and the acceptance check
+
+Staff make the Manila report under **Program reports**: choose a program → **Generate** → check the table (type Partner, Type of agency and Notes in it) → **Submit to Super Admin**. A submitted report is locked; an Admin can **Request unlock** with a reason, and only the Super Admin can **Unlock** it. **Export .xlsx** downloads it in the Manila layout (two-row header, merged Program and Date cells). No extra PHP extension is needed for the export.
+
+To check the report against Manila's February 2026 sheets, run:
+
+```bash
+php artisan reports:acceptance
+```
+
+The first time, it adds a program called "Acceptance: World Cinema, February 2026" with the sheets' four example screenings (past dates, so customers never see them), generates its report and prints every value next to the sheet's value. It ends with "All 4 rows and the program total match the Manila sheets." The report then also appears under Program reports.
 
 ---
 
@@ -145,7 +164,7 @@ Unpaid bookings for paid screenings expire after **15 minutes** and their seats 
 php artisan test
 ```
 
-All tests should pass (85 as of 7 October 2026). They use the separate `cinematheque_test` database, so your demo data is not touched.
+All tests should pass (129 as of 11 October 2026). They use the separate `cinematheque_test` database, so your demo data is not touched.
 
 ---
 
@@ -160,6 +179,9 @@ All tests should pass (85 as of 7 October 2026). They use the separate `cinemath
 | `Tablespace for table ... exists` while migrating | MySQL stopped mid-migration once before. Stop MySQL, delete the leftover `.ibd` file named in the error from `C:\xampp\mysql\data\cinematheque\`, start MySQL, run `php artisan migrate:fresh --seed`. |
 | Port 8000 is busy | `php artisan serve --port=8080` and use `:8080` in the addresses. |
 | Changed `.env` but nothing happened | `php artisan config:clear` |
+| `Data truncated for column 'status'` or a missing column after updating the code | Run `php artisan migrate` (step 5). |
+| A screening or film doesn't show on the customer site | It is a draft. Open it in the staff area and press **Publish** (both the screening and its film must be published). |
+| "This report is submitted and locked" | Ask the Super Admin to unlock it (Program reports → the report → Request unlock). |
 | Emails don't arrive | They go to the Mailtrap test inbox, not real inboxes. Check the inbox of whoever's Mailtrap keys are in `.env`. |
 
 ---
@@ -168,6 +190,6 @@ All tests should pass (85 as of 7 October 2026). They use the separate `cinemath
 
 - `HANDOFF.md` — full project state, decisions and rules (read this before changing code).
 - `README.md` — overview and flows.
-- `docs/` — data dictionary, SQL schema, ERD, evaluation questionnaires.
+- `docs/` — data dictionary, SQL schema and ERD (updated 11 October 2026 for the system revision), evaluation questionnaires.
 - `public/css`, `public/js` — the site's styles and scripts (edited by hand; no build step).
 - `resources/views` — the pages (Blade templates).

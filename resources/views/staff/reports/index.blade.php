@@ -1,6 +1,6 @@
 @extends('layouts.staff')
 
-@section('title', $view === 'demographics' ? 'Demographic report' : 'Reports')
+@section('title', 'Summary')
 
 @section('content')
     @php
@@ -16,7 +16,7 @@
 
     <header class="page-head">
         <div>
-            <h1>Reports</h1>
+            <h1>Summary</h1>
             <p>{{ \Carbon\Carbon::parse($from)->format('M j, Y') }} – {{ \Carbon\Carbon::parse($to)->format('M j, Y') }}</p>
         </div>
         <a class="btn btn--primary" href="{{ route('staff.reports.export', $range + $viewParam) }}" download>Export CSV</a>
@@ -41,6 +41,15 @@
             <button type="submit" class="btn btn--dark btn--sm">Apply</button>
         </div>
     </form>
+
+    <dl class="kpis" aria-label="Totals for this range">
+        <div><dt>Admitted</dt><dd>{{ number_format($kpis['total']) }}</dd></div>
+        <div><dt>Male</dt><dd>{{ number_format($kpis['male']) }}</dd></div>
+        <div><dt>Female</dt><dd>{{ number_format($kpis['female']) }}</dd></div>
+        <div><dt>PWD</dt><dd>{{ number_format($kpis['pwd']) }}</dd></div>
+        <div><dt>Senior</dt><dd>{{ number_format($kpis['senior']) }}</dd></div>
+        <div><dt>Income</dt><dd>₱{{ number_format($kpis['income'], 2) }}</dd></div>
+    </dl>
 
     @if ($view === 'demographics')
         {{-- Everyone actually admitted, with the details from the logsheet. --}}

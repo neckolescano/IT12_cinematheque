@@ -30,15 +30,24 @@
                 <h2 class="panel__title" id="summary-title">Summary</h2>
                 <dl class="facts">
                     <dt>Title</dt><dd data-sum="title">—</dd>
-                    <dt>Type</dt><dd data-sum="kind">—</dd>
+                    <dt>Program</dt><dd data-sum="program">—</dd>
                     <dt>Date</dt><dd data-sum="date">—</dd>
                     <dt>Time</dt><dd data-sum="time">—</dd>
                     <dt>Admission</dt><dd data-sum="admission">—</dd>
                     <dt>Capacity</dt><dd>{{ App\Models\Seat::CAPACITY }} seats</dd>
                 </dl>
-                <div class="summary__actions">
-                    <button type="submit" class="btn btn--primary btn--block">{{ $screening->exists ? 'Save changes' : 'Create screening' }}</button>
-                    <a class="btn btn--secondary btn--block" href="{{ $back }}">Cancel</a>
+                {{-- Save as draft (staff only) · Review (the customer page as it will look) · Publish --}}
+                <p class="status-line">
+                    @if ($screening->exists && ! $screening->isDraft())<span class="state state--success">Published</span> Customers can book it.
+                    @else<span class="state state--warning">Draft</span> Customers can't see it yet.@endif
+                </p>
+                <div class="save-actions">
+                    <button type="submit" name="intent" value="publish" class="btn btn--primary btn--block">{{ $screening->exists && ! $screening->isDraft() ? 'Save and keep published' : 'Publish' }}</button>
+                    <div class="save-actions__row">
+                        <button type="submit" name="intent" value="draft" class="btn btn--secondary">Save as draft</button>
+                        <button type="submit" name="intent" value="review" class="btn btn--secondary">Review</button>
+                    </div>
+                    <a class="btn btn--ghost btn--block" href="{{ $back }}">Cancel</a>
                 </div>
             </section>
         </aside>

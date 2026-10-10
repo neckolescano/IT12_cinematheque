@@ -1,6 +1,7 @@
 {{-- Spotlight carousel (Ayala-style hero): the soonest films as wide black "screen" banners, the current one centred
-     with its neighbours peeking in on both sides. Each slide: a big outlined index number, the copy, and the poster on
-     a yellow offset block (the same mark as the film page). Without JS it is a swipeable row; cinematheque.js makes it
+     with its neighbours peeking in on both sides. Each slide: a big outlined index number, the title, the logline,
+     "Directed by", Programme – Rating – Genres, and the poster on a yellow offset block (the same mark as the film
+     page). With nothing upcoming the slides are recent screenings, marked "Recently screened". Without JS it is a swipeable row; cinematheque.js makes it
      loop (clones at both ends, so the last film peeks in left of the first), and adds autoplay (the active dot fills
      as the slide's time runs), the side arrows, pause and the dots. Expects $featured. --}}
 <section class="spotlight" aria-roledescription="carousel" aria-label="Featured films" data-spotlight>
@@ -11,35 +12,25 @@
                 $movie = $film->movie;
                 $lead = $film->shows->first();
                 $next = $film->shows->first(fn ($s) => $tagger::seatsLeft($s) > 0);
-                $soon = $lead->event_date->gte(today()->addDays(\App\Http\Controllers\PublicScreeningController::NOW_SHOWING_DAYS));
-                $runtime = $movie?->runtime_minutes ? intdiv($movie->runtime_minutes, 60).'h '.($movie->runtime_minutes % 60).'m' : null;
-                $facts = collect([$movie?->release_year, $runtime, $movie?->genres->pluck('genre_name')->take(2)->join(' · ')])->filter();
+                $past = $lead->event_date->lt(today());
+                $logline = $movie?->loglineText();
+                $meta = collect([$lead->program?->name, $movie?->rating, $movie?->genres->pluck('genre_name')->join(', ')])->filter();
             @endphp
             <article class="spotlight__slide" aria-roledescription="slide" aria-label="{{ $i + 1 }} of {{ $featured->count() }}: {{ $film->title }}" data-spotlight-slide="{{ $i }}">
                 <span class="spotlight__num" aria-hidden="true">{{ str_pad($i + 1, 2, '0', STR_PAD_LEFT) }}</span>
 
                 <div class="spotlight__copy">
-                    <span class="spotlight__kicker">{{ $soon ? 'Opens '.$lead->event_date->format('M j') : 'Now showing' }}</span>
+                    @if ($past)<span class="spotlight__kicker">Recently screened</span>@endif
                     <h2 class="spotlight__title">{{ $film->title }}</h2>
+                    @if ($logline)<p class="spotlight__note">{{ $logline }}</p>@endif
                     @if ($movie?->directors->isNotEmpty())
                         <p class="spotlight__director">Directed by <strong>{{ $movie->directors->pluck('full_name')->join(', ') }}</strong></p>
                     @endif
-                    @if ($movie?->rating || $facts->isNotEmpty())
-                        <p class="spotlight__facts">
-                            @if ($movie?->rating)<span class="badge-rating rating--{{ $tagger::ratingGroup($movie->rating) }}">{{ $movie->rating }}</span>@endif
-                            {{ $facts->join(' · ') }}
-                        </p>
-                    @endif
-                    @if ($tags = $tagger::for($film, 3))
-                        <div class="spotlight__tags">@foreach ($tags as $tag)<span class="sc-tag">{{ $tag }}</span>@endforeach</div>
-                    @endif
-                    @if ($movie?->curator_note)
-                        <p class="spotlight__note"><span class="sr-only">Curator's note: </span>“{{ $movie->curator_note }}”</p>
-                    @elseif ($movie?->synopsis)
-                        <p class="spotlight__note">{{ Str::limit($movie->synopsis, 150) }}</p>
+                    @if ($meta->isNotEmpty())
+                        <p class="spotlight__facts">{{ $meta->join(' - ') }}</p>
                     @endif
                     <div class="spotlight__actions">
-                        <a class="btn btn--gold" href="{{ route('screenings.show', $next ?? $lead) }}">{{ $next ? 'Book Seats' : 'Details' }}<span class="sr-only">: {{ $film->title }}</span></a>
+                        <a class="btn btn--gold" href="{{ route('screenings.show', $next ?? $lead) }}">{{ $next && ! $past ? 'Book Seats' : 'Details' }}<span class="sr-only">: {{ $film->title }}</span></a>
                         @if ($movie?->trailer_url)
                             @include('public.screenings._trailer-button', ['class' => 'btn btn--glass'])
                         @endif

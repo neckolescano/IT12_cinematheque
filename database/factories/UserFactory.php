@@ -26,6 +26,12 @@ class UserFactory extends Factory
         ];
     }
 
+    /** The one Super Admin (reuse it: a second one is refused). */
+    public function superAdmin(): static
+    {
+        return $this->state(fn () => ['role' => 'super_admin']);
+    }
+
     public function inactive(): static
     {
         return $this->state(fn () => ['is_active' => false]);

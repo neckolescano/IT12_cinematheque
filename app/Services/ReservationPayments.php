@@ -38,6 +38,25 @@ class ReservationPayments
      *
      * @throws PayMongoException
      */
+    /** Methods offered at checkout (PAYMONGO_PAYMENT_METHODS). Card payments are not accepted. */
+    public static function paymentMethods(): array
+    {
+        return array_values(array_diff(config('services.paymongo.payment_method_types'), ['card']));
+    }
+
+    /** "+639171234567" or "09171234567" → "9171234567" (PayMongo adds the country code itself). */
+    public static function nationalPhone(?string $phone): ?string
+    {
+        $digits = preg_replace('/\D/', '', (string) $phone);
+
+        return match (true) {
+            $digits === '' => null,
+            str_starts_with($digits, '63') && strlen($digits) === 12 => substr($digits, 2),
+            str_starts_with($digits, '0') && strlen($digits) === 11 => substr($digits, 1),
+            default => $digits,
+        };
+    }
+
     public function checkoutUrl(Reservation $reservation): ?string
     {
         $payment = $reservation->payment;
@@ -71,7 +90,7 @@ class ReservationPayments
                 'currency' => 'PHP',
                 'quantity' => 1,
             ]],
-            'payment_method_types' => array_values(config('services.paymongo.payment_method_types')),
+            'payment_method_types' => self::paymentMethods(),
             'reference_number' => $reservation->booking_reference,
             'description' => 'Cinematheque Centre Davao booking '.$reservation->booking_reference,
             'success_url' => route('bookings.payment.return', $reservation),
@@ -82,7 +101,8 @@ class ReservationPayments
             'billing' => array_filter([
                 'name' => $reservation->lead_full_name,
                 'email' => $reservation->lead_email,
-                'phone' => $reservation->lead_contact_no,
+                // PayMongo's phone field has its own +63 selector, so send only the national number.
+                'phone' => self::nationalPhone($reservation->lead_contact_no),
             ]),
             'metadata' => [
                 'reservation_id' => (string) $reservation->reservation_id,
@@ -163,7 +183,7 @@ class ReservationPayments
             ]);
 
             $reservation = $payment->reservation;
-            if ($reservation->status === 'pending') {
+            if ($reservation->status === 'awaiting_payment') {
                 $reservation->update(['status' => 'confirmed']);
 
                 return true;
@@ -179,7 +199,7 @@ class ReservationPayments
 
             // Paid after staff cancelled it or after the payment window: the booking stays
             // cancelled; staff see "refund due" on the reservation page.
-            Log::warning('PayMongo payment received for a reservation that is not pending; refund due', [
+            Log::warning('PayMongo payment received for a reservation that is not awaiting payment; refund due', [
                 'booking' => $reservation->booking_reference, 'status' => $reservation->status,
                 'reason' => $reservation->cancellation_reason,
             ]);

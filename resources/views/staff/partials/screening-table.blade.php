@@ -25,8 +25,8 @@
                     <td>
                         <a class="cell-title link-quiet" href="{{ route('staff.screenings.show', $s) }}">{{ $s->event_title }}</a>
                         <div class="cell-sub">
-                            {{ $s->isPaid() ? '₱'.number_format($s->price, 0) : 'Free' }}
-                            @if ($s->pending_count) · <span class="text-warning">{{ $s->pending_count }} {{ $s->isPaid() ? 'awaiting payment' : 'to approve' }}</span>@endif
+                            @if ($s->status === 'draft')<span class="state state--warning">Draft</span> · @endif{{ $s->isPaid() ? '₱'.number_format($s->price, 0) : 'Free' }}
+                            @if ($s->pending_count) · <span class="text-warning">{{ $s->pending_count }} awaiting payment</span>@endif
                         </div>
                     </td>
                     <td class="nowrap">

@@ -22,6 +22,8 @@ Route::prefix('cinemathequecentredavao')->group(function () {
     Route::view('about', 'public.about')->name('about');
 
     Route::get('screenings/{screening}/reserve', [BookingController::class, 'create'])->name('bookings.create');
+    Route::post('screenings/{screening}/reserve/review', [BookingController::class, 'review'])
+        ->middleware('throttle:30,1')->name('bookings.review');
     Route::post('screenings/{screening}/reserve', [BookingController::class, 'store'])
         ->middleware('throttle:10,1')->name('bookings.store');
 
@@ -67,26 +69,46 @@ Route::prefix('ccdadmin')->group(function () {
 
             // Screenings workspace (details + attendee checklist + admission on one page)
             Route::resource('screenings', Staff\ScreeningController::class);
-            Route::post('screenings/{screening}/approve-pending', [Staff\ScreeningController::class, 'approvePending'])->name('screenings.approve-pending');
+            // Review (the customer page as it will look) and Publish, for screenings and films
+            Route::get('screenings/{screening}/preview', [Staff\ScreeningController::class, 'preview'])->name('screenings.preview');
+            Route::post('screenings/{screening}/publish', [Staff\ScreeningController::class, 'publish'])->name('screenings.publish');
+            Route::get('movies/{movie}/preview', [Staff\MovieController::class, 'preview'])->name('movies.preview');
+            Route::post('movies/{movie}/publish', [Staff\MovieController::class, 'publish'])->name('movies.publish');
 
             Route::post('reservation-seats/{reservationSeat}/attendance', [Staff\AttendanceController::class, 'store'])->name('attendances.store');
             Route::post('reservations/{reservation}/admit', [Staff\AttendanceController::class, 'storeGroup'])->name('reservations.admit');
             Route::patch('attendances/{attendance}', [Staff\AttendanceController::class, 'update'])->name('attendances.update');
             Route::delete('attendances/{attendance}', [Staff\AttendanceController::class, 'destroy'])->name('attendances.destroy');
 
-            // Reservations across all screenings
+            // Booking actions from the screening roster (the separate Reservations pages now redirect to it)
             Route::get('reservations', [Staff\ReservationController::class, 'index'])->name('reservations.index');
             Route::get('reservations/{reservation}', [Staff\ReservationController::class, 'show'])->name('reservations.show');
-            Route::patch('reservations/{reservation}/confirm', [Staff\ReservationController::class, 'confirm'])->name('reservations.confirm');
             Route::patch('reservations/{reservation}/cancel', [Staff\ReservationController::class, 'cancel'])->name('reservations.cancel');
             Route::post('reservations/{reservation}/resend', [Staff\ReservationController::class, 'resend'])->name('reservations.resend');
             Route::post('reservations/{reservation}/sync-payment', [Staff\ReservationController::class, 'syncPayment'])->name('reservations.sync-payment');
 
+            // Program reports (the Manila format): generate → submit (locked) → unlock request → Super Admin unlock
+            Route::get('program-reports', [Staff\ProgramReportController::class, 'index'])->name('program-reports.index');
+            Route::post('program-reports', [Staff\ProgramReportController::class, 'store'])->name('program-reports.store');
+            Route::get('program-reports/{report}', [Staff\ProgramReportController::class, 'show'])->name('program-reports.show');
+            Route::put('program-reports/{report}', [Staff\ProgramReportController::class, 'update'])->name('program-reports.update');
+            Route::post('program-reports/{report}/submit', [Staff\ProgramReportController::class, 'submit'])->name('program-reports.submit');
+            Route::post('program-reports/{report}/request-unlock', [Staff\ProgramReportController::class, 'requestUnlock'])->name('program-reports.request-unlock');
+            Route::post('program-reports/{report}/unlock', [Staff\ProgramReportController::class, 'unlock'])->name('program-reports.unlock');
+            Route::get('program-reports/{report}/export', [Staff\ProgramReportController::class, 'export'])->name('program-reports.export');
+            // One-click export from the list: the locked snapshot once submitted, otherwise live figures
+            Route::get('program-reports/programs/{program}/export.{format}', [Staff\ProgramReportController::class, 'exportProgram'])
+                ->whereIn('format', ['xlsx', 'csv'])->name('program-reports.export-program');
+
+            // Date-range summary (attendance and demographics, CSV)
             Route::get('reports', [Staff\ReportController::class, 'index'])->name('reports.index');
             Route::get('reports/export', [Staff\ReportController::class, 'export'])->name('reports.export');
 
             // Settings (directors, cast and genres are typed on the screening/movie forms; no separate admin)
-            Route::resource('movies', Staff\MovieController::class)->except('show');
+            // Programs are free-text tags on the film form now; the old Programs page lands on the catalog.
+            Route::redirect('programs', '/ccdadmin/movies')->name('programs.index');
+            // A film's panel (show): poster, details, Edit movie, Add screening schedule and its screenings
+            Route::resource('movies', Staff\MovieController::class);
             Route::resource('users', Staff\UserController::class)->except('show', 'destroy');
         });
 });

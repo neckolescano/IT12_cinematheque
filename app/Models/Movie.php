@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class Movie extends Model
@@ -16,7 +18,14 @@ class Movie extends Model
 
     public $timestamps = false;
 
-    protected $fillable = ['title', 'runtime_minutes', 'rating', 'release_year', 'synopsis', 'curator_note', 'trailer_url', 'poster_path'];
+    protected $fillable = ['title', 'runtime_minutes', 'rating', 'release_year', 'synopsis', 'logline', 'curator_note', 'trailer_url', 'poster_path', 'status'];
+
+    /** draft = only staff see it; published = on the customer site. */
+    public const STATUSES = ['draft', 'published'];
+
+    protected $attributes = [
+        'status' => 'published',
+    ];
 
     /** MTRCB content ratings offered in the movie form. */
     public const RATINGS = ['G', 'PG', 'PG-13', 'R-13', 'R-16', 'R-18'];
@@ -142,9 +151,43 @@ class Movie extends Model
         };
     }
 
+    /**
+     * The banner's one line: the logline, or the synopsis up to its first full stop, cut at 120 characters.
+     */
+    public function loglineText(): ?string
+    {
+        if (filled($this->logline)) {
+            return $this->logline;
+        }
+        $synopsis = trim((string) $this->synopsis);
+        if ($synopsis === '') {
+            return null;
+        }
+        $first = preg_match('/^.+?[.!?](?=\s|$)/su', $synopsis, $m) ? $m[0] : $synopsis;
+
+        return Str::limit(preg_replace('/\s+/', ' ', $first), 120);
+    }
+
+    /** Films customers may see (drafts are staff-only). */
+    public function scopePublished(Builder $query): void
+    {
+        $query->where('status', 'published');
+    }
+
+    public function isDraft(): bool
+    {
+        return $this->status === 'draft';
+    }
+
     public function screenings(): HasMany
     {
         return $this->hasMany(Screening::class, 'movie_id', 'movie_id');
+    }
+
+    /** A film can be in more than one program (a festival may screen it again). */
+    public function programs(): BelongsToMany
+    {
+        return $this->belongsToMany(Program::class, 'movie_program', 'movie_id', 'program_id');
     }
 
     public function actors(): BelongsToMany

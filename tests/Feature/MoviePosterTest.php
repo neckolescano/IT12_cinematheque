@@ -36,7 +36,7 @@ class MoviePosterTest extends TestCase
         $this->post(route('staff.movies.store'), [
             'title' => 'Himala',
             'poster' => $this->poster('himala.jpg'),
-        ])->assertRedirect(route('staff.movies.index'));
+        ])->assertRedirect(route('staff.movies.show', Movie::firstOrFail()));
 
         $movie = Movie::firstOrFail();
         $this->assertStringStartsWith('posters/', $movie->poster_path);

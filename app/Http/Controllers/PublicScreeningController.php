@@ -19,8 +19,11 @@ class PublicScreeningController extends Controller
     /** ...within this many days are "Advance Booking"; anything later is "Coming Soon". */
     public const ADVANCE_BOOKING_DAYS = 30;
 
-    /** Films in the home spotlight carousel. */
-    public const FEATURED = 5;
+    /** Films in the home banner: the soonest upcoming ones. */
+    public const FEATURED = 6;
+
+    /** With nothing upcoming, the banner shows this many recent screenings instead, one per program first. */
+    public const FEATURED_PAST = 5;
 
     public function index(Request $request): View
     {
@@ -29,7 +32,8 @@ class PublicScreeningController extends Controller
             'type' => ['nullable', Rule::in(Screening::TYPES)],
         ]);
 
-        $screenings = Screening::with('movie.genres', 'movie.directors')
+        $screenings = Screening::with('movie.genres', 'movie.directors', 'program')
+            ->published()
             ->withCount('heldSeats')
             ->whereDate('event_date', '>=', today())
             ->when($filters['q'] ?? null, fn ($q, $term) => $q->where(fn ($w) => $w
@@ -65,29 +69,84 @@ class PublicScreeningController extends Controller
         return view('public.screenings.index', [
             'tabs' => collect(['now' => 'Now Showing', 'advance' => 'Advance Booking', 'soon' => 'Coming Soon', 'special' => 'Special Screenings'])
                 ->map(fn ($label, $key) => (object) ['key' => $key, 'label' => $label, 'films' => $tabs->get($key, collect())->values()]),
-            // Spotlight: the soonest films, those with a real poster first (stable sort keeps date order).
-            'featured' => $films->sortByDesc(fn ($film) => (bool) $film->movie?->poster_path)->take(self::FEATURED)->values(),
+            'featured' => $this->featured($films, $filters),
             'total' => $screenings->count(),
             'filters' => $filters,
         ]);
     }
 
+    /**
+     * The home banner: the soonest upcoming films (one slide per film, by next screening date). When nothing is
+     * upcoming: the most recent past screenings, one per program first, so the banner is never empty.
+     */
+    private function featured(Collection $films, array $filters): Collection
+    {
+        if ($films->isNotEmpty()) {
+            return $films->take(self::FEATURED)->values();
+        }
+        if (array_filter($filters)) {
+            return collect(); // a search with no results: no banner
+        }
+
+        $recent = Screening::with('movie.genres', 'movie.directors', 'program')
+            ->published()
+            ->withCount('heldSeats')
+            ->whereDate('event_date', '<', today())
+            ->orderByDesc('event_date')->orderByDesc('start_time')
+            ->limit(60)->get();
+
+        $picked = $recent->unique('program_id')->take(self::FEATURED_PAST);
+        $picked = $picked->concat($recent->diff($picked))->take(self::FEATURED_PAST);
+
+        return $picked->map(fn (Screening $s) => (object) [
+            'key' => 'past-'.$s->screening_id,
+            'movie' => $s->movie,
+            'title' => $s->movie?->title ?? $s->event_title,
+            'shows' => collect([$s]),
+        ])->values();
+    }
+
     public function show(Screening $screening): View
+    {
+        // Drafts (the screening or its film) don't exist for customers.
+        abort_if($screening->isDraft(), 404);
+
+        return $this->page($screening);
+    }
+
+    /**
+     * The film page for a screening. Staff "Review" renders the same page with $preview set (a bar with
+     * Back to edit / Publish), and then the draft itself and its draft showtimes are included.
+     *
+     * @param  array{back: string, publish: string, label: string}|null  $preview
+     */
+    public function page(Screening $screening, ?array $preview = null): View
     {
         $screening->load('movie.actors', 'movie.directors', 'movie.genres');
 
         // Every upcoming showtime of the same film (this one included), for the showtimes board.
-        $showtimes = $screening->movie_id
-            ? Screening::where('movie_id', $screening->movie_id)
-                ->withCount('heldSeats')
-                ->where(fn ($q) => $q->whereDate('event_date', '>=', today())->orWhere('screening_id', $screening->getKey()))
-                ->orderBy('event_date')->orderBy('start_time')
-                ->limit(60)->get()
-            : collect([$screening->loadCount('heldSeats')]);
+        $showtimes = Screening::where('movie_id', $screening->movie_id)
+            ->when(! $preview, fn ($q) => $q->where('status', 'published'))
+            ->withCount('heldSeats')
+            ->where(fn ($q) => $q->whereDate('event_date', '>=', today())->orWhere('screening_id', $screening->getKey()))
+            ->orderBy('event_date')->orderBy('start_time')
+            ->limit(60)->get();
+
+        if ($preview) {
+            // The home page card for this film, built the way index() builds it.
+            $upcoming = $showtimes->filter(fn ($s) => $s->event_date->gte(today()))->values();
+            $preview['film'] = (object) [
+                'key' => 'film-'.$screening->movie_id,
+                'movie' => $screening->movie,
+                'title' => $screening->movie->title,
+                'shows' => $upcoming->isNotEmpty() ? $upcoming : $showtimes->values(),
+            ];
+        }
 
         return view('public.screenings.show', [
             'screening' => $screening,
             'showtimes' => $showtimes,
+            'preview' => $preview,
         ]);
     }
 }

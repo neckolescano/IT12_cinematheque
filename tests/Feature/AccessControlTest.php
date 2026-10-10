@@ -35,8 +35,10 @@ class AccessControlTest extends TestCase
 
             $this->actingAs($user)->get('/ccdadmin')->assertOk();
             $this->actingAs($user)->get('/ccdadmin/screenings')->assertOk();
-            $this->actingAs($user)->get('/ccdadmin/users')->assertOk();
             $this->actingAs($user)->get('/ccdadmin/reports')->assertOk();
+            $this->actingAs($user)->get('/ccdadmin/program-reports')->assertOk();
+            // Phase 4: staff accounts are the Super Admin's; position (AVT/PDO) still changes nothing.
+            $this->actingAs($user)->get('/ccdadmin/users')->assertForbidden();
         }
     }
 
@@ -74,14 +76,16 @@ class AccessControlTest extends TestCase
 
     public function test_staff_cannot_deactivate_themselves(): void
     {
-        $user = User::factory()->create();
+        // Nobody, the Super Admin included, can deactivate or demote their own account: the fields are ignored.
+        foreach ([User::factory()->create(), User::factory()->superAdmin()->create()] as $user) {
+            $this->actingAs($user)->put(route('staff.users.update', $user), [
+                'first_name' => $user->first_name, 'last_name' => $user->last_name,
+                'email' => $user->email, 'is_active' => '0', 'role' => 'admin',
+            ])->assertSessionHasNoErrors();
 
-        $this->actingAs($user)->put(route('staff.users.update', $user), [
-            'first_name' => $user->first_name, 'last_name' => $user->last_name,
-            'email' => $user->email, 'is_active' => '0',
-        ])->assertSessionHasErrors('is_active');
-
-        $this->assertTrue($user->fresh()->is_active);
+            $this->assertTrue($user->fresh()->is_active);
+        }
+        $this->assertSame(1, User::where('role', 'super_admin')->count());
     }
 
     public function test_customer_pages_never_link_to_the_admin_side_even_for_staff(): void

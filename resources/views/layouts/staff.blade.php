@@ -20,8 +20,6 @@
 
 @php
     // Sidebar is organised by staff task, not by database table.
-    $awaitingApproval = \App\Models\Reservation::where('status', 'pending')->doesntHave('payment')
-        ->whereHas('screening', fn ($q) => $q->whereDate('event_date', '>=', today()))->count();
     $icons = [
         'dash' => '<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>',
         'film' => '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/>',
@@ -30,26 +28,28 @@
         'chart' => '<path d="M3 3v18h18"/><path d="M7 15v3M12 10v8M17 6v12"/>',
         'book' => '<path d="M4 19.5V5a2 2 0 0 1 2-2h14v16H6.5A2.5 2.5 0 0 0 4 21.5v-2z"/><path d="M8 7h8M8 11h6"/>',
         'seat' => '<path d="M6 11V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5"/><path d="M4 11h16v5H4zM6 16v4M18 16v4"/>',
+        'file' => '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+        'layers' => '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
         'user' => '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>',
     ];
+    $user = auth()->user();
+    // Super Admin: submitted reports waiting in the inbox (submitted = locked, sent for review).
+    $reportInbox = $user->isSuperAdmin() ? \App\Models\Report::where('status', 'submitted')->count() : 0;
+    // Three domains: Operations (daily work), Insights (reports), Settings (configuration only).
     $nav = [
-        // Same grouping and names as the mobile staff app.
         null => [
-            ['staff.dashboard', ['staff.dashboard'], 'Dashboard', 'dash'],
+            ['staff.dashboard', ['staff.dashboard', 'staff.search'], 'Dashboard', 'dash'],
         ],
         'Operations' => [
-            ['staff.screenings.index', ['staff.screenings.index', 'staff.screenings.show'], 'Attendance', 'check'],
-            ['staff.reservations.index', ['staff.reservations.*'], 'Reservations', 'ticket', $awaitingApproval],
+            ['staff.movies.index', ['staff.movies.*', 'staff.screenings.create', 'staff.screenings.edit'], 'Films & schedule', 'film'],
+            ['staff.screenings.index', ['staff.screenings.index', 'staff.screenings.show', 'staff.screenings.preview'], 'Screenings & check-in', 'check'],
         ],
         'Insights' => [
-            ['staff.reports.index', ['staff.reports.*'], 'Reports', 'chart'],
+            ['staff.program-reports.index', ['staff.program-reports.*'], 'Program reports', 'file', $reportInbox],
+            ['staff.reports.index', ['staff.reports.*'], 'Summary', 'chart'],
         ],
-        'Settings' => [
-            ['staff.movies.index', ['staff.movies.*'], 'Film catalog', 'book'],
-            ['staff.users.index', ['staff.users.*'], 'Staff accounts', 'user'],
-        ],
+        'Settings' => $user->isSuperAdmin() ? [['staff.users.index', ['staff.users.*'], 'Staff accounts', 'user']] : [],
     ];
-    $user = auth()->user();
     $initials = strtoupper(mb_substr($user->first_name, 0, 1).mb_substr($user->last_name, 0, 1));
 @endphp
 
@@ -61,12 +61,13 @@
         </a>
 
         @foreach ($nav as $label => $links)
+            @continue(empty($links))
             @if ($label)<div class="side-label">{{ $label }}</div>@endif
             @foreach ($links as $link)
                 <a class="side-link" href="{{ route($link[0]) }}" @if (request()->routeIs(...$link[1])) aria-current="page" @endif>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{!! $icons[$link[3]] !!}</svg>
                     {{ $link[2] }}
-                    @if (! empty($link[4]))<span class="side-count" title="Free reservations awaiting approval">{{ $link[4] }}</span>@endif
+                    @if (! empty($link[4]))<span class="side-count" title="Submitted reports to review">{{ $link[4] }}</span>@endif
                 </a>
             @endforeach
         @endforeach

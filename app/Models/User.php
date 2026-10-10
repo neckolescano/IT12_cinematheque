@@ -8,14 +8,17 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 /**
- * Staff account (AVT or PDO). Being a row here *is* being staff.
- * `position` is descriptive only and never gates access.
+ * Staff account. Being a row here *is* being staff.
+ * `role` gates access: one super_admin (held by FDCP Manila; locks and unlocks reports, manages
+ * staff) and admins (daily operations). `position` (AVT/PDO) is a job title only.
  */
 class User extends Authenticatable
 {
     use HasFactory, Notifiable;
 
     public const POSITIONS = ['AVT', 'PDO'];
+
+    public const ROLES = ['super_admin', 'admin'];
 
     protected $primaryKey = 'user_id';
 
@@ -25,14 +28,31 @@ class User extends Authenticatable
     protected $rememberTokenName = '';
 
     protected $fillable = [
-        'first_name', 'middle_name', 'last_name', 'email', 'password', 'position', 'is_active',
+        'first_name', 'middle_name', 'last_name', 'email', 'password', 'position', 'role', 'is_active',
     ];
 
     protected $hidden = ['password'];
 
     protected $attributes = [
         'is_active' => true,
+        'role' => 'admin',
     ];
+
+    /** There is exactly one Super Admin account (client decision): a second one is refused. */
+    protected static function booted(): void
+    {
+        static::saving(function (User $user) {
+            if ($user->role === 'super_admin' && $user->isDirty('role')
+                && static::where('role', 'super_admin')->whereKeyNot($user->getKey())->exists()) {
+                throw new \DomainException('There is already a Super Admin account.');
+            }
+        });
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === 'super_admin';
+    }
 
     protected function casts(): array
     {

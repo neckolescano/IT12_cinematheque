@@ -23,12 +23,6 @@
     </div>
     @if ($showState)<span class="state state--{{ $tone }}">{{ $stateLabel }}</span>@endif
     <div class="row__actions">
-        @can('confirm', $r)
-            <form method="POST" action="{{ route('staff.reservations.confirm', $r) }}">
-                @csrf @method('PATCH')
-                <button type="submit" class="btn btn--sm btn--primary" title="Approve and email the e-ticket">Approve</button>
-            </form>
-        @endcan
         <span class="row__time" title="{{ $r->reservation_datetime->format('M j, Y g:i A') }}">{{ $r->reservation_datetime->diffForHumans(['short' => true]) }}</span>
     </div>
 </li>

@@ -56,15 +56,16 @@ class ReservationFactory extends Factory
                     'last_name' => $i === 0 ? $reservation->lead_last_name : fake()->lastName(),
                     'age' => fake()->numberBetween(12, 80),
                     'sex' => fake()->randomElement(['M', 'F']),
-                    'company_school' => fake()->optional()->company(),
+                    'company_school' => fake()->company(), // required (OWWA)
                     'pwd_indicator' => false,
                 ]);
             }
         });
     }
 
-    public function pending(): static
+    /** A paid-screening booking whose seats are held while PayMongo processes the payment. */
+    public function awaitingPayment(): static
     {
-        return $this->state(fn () => ['status' => 'pending']);
+        return $this->state(fn () => ['status' => 'awaiting_payment']);
     }
 }

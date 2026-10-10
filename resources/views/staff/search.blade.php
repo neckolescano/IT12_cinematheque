@@ -24,8 +24,7 @@
 
     @if ($bookings->isNotEmpty())
         <section class="block">
-            <div class="block__head"><h2>Bookings <span class="count">{{ $bookings->count() }}</span></h2>
-                <a href="{{ route('staff.reservations.index', ['q' => $q]) }}">View all</a></div>
+            <div class="block__head"><h2>Bookings <span class="count">{{ $bookings->count() }}</span></h2></div>
             <ul class="rows">
                 @foreach ($bookings as $r)
                     @include('staff.partials.booking-row', ['r' => $r])

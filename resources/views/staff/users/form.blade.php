@@ -64,16 +64,35 @@
             </div>
         </div>
 
-        <input type="hidden" name="is_active" value="0">
-        <label class="check">
-            <input type="checkbox" name="is_active" value="1" @checked(old('is_active', $staff->is_active))>
-            Active (can sign in)
-        </label>
-        @error('is_active') <div class="field__error">{{ $message }}</div> @enderror
+        {{-- Role and active status: the Super Admin's to set, never on their own account. --}}
+        @can('manage', $staff)
+            <div class="form-grid">
+                <div class="field @error('role') has-error @enderror">
+                    <label for="role">Role <span class="req">*</span></label>
+                    <select id="role" name="role">
+                        <option value="admin" @selected(old('role', $staff->role) === 'admin')>Admin</option>
+                        <option value="super_admin" @selected(old('role', $staff->role) === 'super_admin')>Super Admin</option>
+                    </select>
+                    <span class="hint">Admins run screenings, bookings and reports. The one Super Admin also unlocks reports and manages accounts.</span>
+                    @error('role') <span class="field__error">{{ $message }}</span> @enderror
+                </div>
+            </div>
+
+            <input type="hidden" name="is_active" value="0">
+            <label class="check">
+                <input type="checkbox" name="is_active" value="1" @checked(old('is_active', $staff->is_active))>
+                Active (can sign in)
+            </label>
+            @error('is_active') <div class="field__error">{{ $message }}</div> @enderror
+        @else
+            @if ($editing)
+                <p class="hint">Role: <strong>{{ $staff->isSuperAdmin() ? 'Super Admin' : 'Admin' }}</strong>. Only the Super Admin changes roles and account status.</p>
+            @endif
+        @endcan
 
         <div class="form-actions">
             <button type="submit" class="btn btn--primary">{{ $editing ? 'Save changes' : 'Create account' }}</button>
-            <a class="btn btn--secondary" href="{{ route('staff.users.index') }}">Cancel</a>
+            <a class="btn btn--secondary" href="{{ auth()->user()->isSuperAdmin() ? route('staff.users.index') : route('staff.dashboard') }}">Cancel</a>
         </div>
     </form>
 @endsection

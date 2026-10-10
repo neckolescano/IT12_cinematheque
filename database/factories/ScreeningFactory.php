@@ -2,6 +2,8 @@
 
 namespace Database\Factories;
 
+use App\Models\Movie;
+use App\Models\Program;
 use App\Models\Screening;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -15,7 +17,9 @@ class ScreeningFactory extends Factory
     {
         return [
             'event_title' => rtrim(fake()->sentence(3), '.'),
-            'movie_id' => null,
+            // The screening's film, titled like the screening (what customers see on its card).
+            'movie_id' => fn (array $attributes) => Movie::factory()->create(['title' => $attributes['event_title']])->movie_id,
+            'program_id' => Program::factory(),
             'event_date' => today()->addDays(fake()->numberBetween(1, 30))->toDateString(),
             'start_time' => '18:00',
             'end_time' => '20:00',
@@ -29,6 +33,11 @@ class ScreeningFactory extends Factory
     public function paid(float $price = 150.00): static
     {
         return $this->state(fn () => ['type' => 'paid', 'price' => $price]);
+    }
+
+    public function draft(): static
+    {
+        return $this->state(fn () => ['status' => 'draft']);
     }
 
     public function past(): static

@@ -28,7 +28,8 @@ class DashboardRevisionTest extends TestCase
     private function screeningForm(array $overrides = []): array
     {
         return array_merge([
-            'kind' => 'film', 'film_title' => 'Himala', 'genres' => ['Drama'],
+            'program_id' => \App\Models\Program::firstOrCreate(['name' => 'Filipino Classics'])->program_id,
+            'film_title' => 'Himala', 'genres' => ['Drama'],
             'event_title' => '', 'event_date' => today()->addDay()->format('Y-m-d'), 'start_time' => '17:00', 'end_time' => '19:00',
             'type' => 'free',
         ], $overrides);
@@ -73,6 +74,7 @@ class DashboardRevisionTest extends TestCase
     {
         $reservation = Reservation::factory()->withSeats(3)->create(); // confirmed
         [$a, $b, $absent] = $reservation->reservationSeats()->orderBy('seat_id')->get()->all();
+        $this->travelTo($reservation->screening->startsAt()); // check-in is open
 
         $this->actingAs($this->staff)->get(route('staff.screenings.show', $reservation->screening))
             ->assertOk()->assertSee('Party of 3')->assertSee('Admit party')->assertSee('id="admit-'.$reservation->reservation_id.'"', false);
@@ -91,7 +93,7 @@ class DashboardRevisionTest extends TestCase
 
     public function test_admit_all_respects_booking_state_and_needs_a_selection(): void
     {
-        $pending = Reservation::factory()->pending()->withSeats(2)->create();
+        $pending = Reservation::factory()->awaitingPayment()->withSeats(2)->create();
         $this->actingAs($this->staff)->post(route('staff.reservations.admit', $pending), ['seats' => $pending->reservationSeats->pluck('reservation_seat_id')->all()])
             ->assertSessionHas('warning');
         $this->assertSame(0, $pending->reservationSeats()->whereHas('attendance')->count());
@@ -137,7 +139,8 @@ class DashboardRevisionTest extends TestCase
         Movie::factory()->create(['title' => 'Himala', 'release_year' => 1982]);
 
         $this->actingAs($this->staff)->get(route('staff.dashboard'))->assertOk()->assertSee('<h1>Dashboard</h1>', false);
-        $this->get(route('staff.movies.index'))->assertOk()->assertSee('Himala')->assertSee('class="table films"', false);
+        $this->get(route('staff.movies.index'))->assertOk()->assertSee('Himala')->assertSee('class="poster-grid"', false)
+            ->assertSee(route('staff.movies.show', Movie::firstOrFail()), false);
     }
 
     public function test_attendance_page_has_no_create_button_and_scheduling_starts_from_a_film(): void
@@ -146,8 +149,8 @@ class DashboardRevisionTest extends TestCase
         Screening::factory()->create(['event_date' => today()->addDay()]);
 
         $this->actingAs($this->staff)->get(route('staff.screenings.index'))
-            ->assertOk()->assertSee('<h1>Attendance</h1>', false)->assertDontSee(route('staff.screenings.create'), false);
-        $this->get(route('staff.movies.index'))->assertSee(route('staff.screenings.create', ['movie' => $movie->movie_id]), false);
+            ->assertOk()->assertSee('<h1>Screenings &amp; check-in</h1>', false)->assertDontSee(route('staff.screenings.create'), false);
+        $this->get(route('staff.movies.show', $movie))->assertSee(route('staff.screenings.create', ['movie' => $movie->movie_id]), false);
         $this->get(route('staff.screenings.create', ['movie' => $movie->movie_id]))->assertOk()->assertSee('value="Himala"', false);
     }
 

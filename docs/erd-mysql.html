@@ -19,6 +19,7 @@ body { background: #ffffff; margin: 16px; font-family: system-ui, sans-serif; }
 <p><strong>2026-09-26 revision:</strong> <code>attendances.control_number</code> removed; PayMongo fields added to <code>payments</code>. <code>payment_proofs</code> and <code>payment_qr_codes</code> retired.</p>
 <p><strong>2026-10-06 revision:</strong> cancelled bookings release their seats (<code>reservation_seats.released_at</code>, generated <code>held_seat_id</code>, <code>UNIQUE(screening_id, held_seat_id)</code>); unpaid bookings expire after 15 minutes (<code>reservations.cancellation_reason</code>, <code>cancelled_at</code>); <code>movies.poster_path</code> added; <code>payment_proofs</code> and <code>payment_qr_codes</code> dropped.</p>
 <p><strong>2026-10-07 revision:</strong> <code>reservation_attendees.pwd_id_no</code> added (optional PWD ID number; <code>pwd_indicator</code> is set when it is filled). Actors, directors and genres no longer have separate admin pages: they are entered on the screening/film form (genres from a fixed list). The tables and relationships are unchanged.</p>
+<p><strong>2026-10-11 revision (system revision):</strong> new <code>programs</code> and <code>movie_program</code> (Program → Movie → Screening; a film can be in several programs, a screening is in one); <code>movies.status</code> and <code>screenings.status</code> (draft/published); <code>screenings.movie_id</code> and <code>program_id</code> required, plus <code>films_count</code>, <code>partner</code>, <code>agency_type</code>, <code>notes</code>; <code>reservations.status</code> is now awaiting_payment / confirmed / cancelled (auto-approval); <code>reservation_seats</code> gains <code>unit_price</code>, <code>discount_type</code>, <code>amount_due</code> (20% PWD/Senior discount per ticket); <code>reservation_attendees.company_school</code> required; <code>users.role</code> (super_admin/admin); new <code>reports</code>, <code>report_rows</code> and <code>report_events</code> (one Manila report per program, frozen rows, lock and audit trail). Movie–Screening is now mandatory on both sides of the screening.</p>
 <div id="erd-mysql"></div>
 <script type="module">
 import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
@@ -32,7 +33,21 @@ const src = `erDiagram
     VARCHAR(100) email UK
     VARCHAR(255) password
     ENUM position "AVT, PDO; NULL"
+    ENUM role "super_admin, admin; DEFAULT admin"
     BOOLEAN is_active "DEFAULT 1"
+  }
+  PROGRAMS {
+    BIGINT_UNSIGNED program_id PK "AUTO_INCREMENT"
+    VARCHAR(100) name UK
+    VARCHAR(100) name_key UK "lowercased tag"
+    TEXT description "NULL"
+    BOOLEAN is_active "DEFAULT 1"
+    TIMESTAMP created_at "NULL"
+    TIMESTAMP updated_at "NULL"
+  }
+  MOVIE_PROGRAM {
+    BIGINT_UNSIGNED movie_id PK,FK
+    BIGINT_UNSIGNED program_id PK,FK
   }
   MOVIES {
     BIGINT_UNSIGNED movie_id PK "AUTO_INCREMENT"
@@ -41,7 +56,11 @@ const src = `erDiagram
     VARCHAR(10) rating "NULL"
     SMALLINT_UNSIGNED release_year "NULL"
     TEXT synopsis "NULL"
+    VARCHAR(200) logline "NULL"
+    VARCHAR(200) curator_note "NULL"
+    VARCHAR(255) trailer_url "NULL"
     VARCHAR(255) poster_path "NULL"
+    ENUM status "draft, published"
   }
   ACTORS {
     BIGINT_UNSIGNED actor_id PK "AUTO_INCREMENT"
@@ -79,13 +98,19 @@ const src = `erDiagram
   SCREENINGS {
     BIGINT_UNSIGNED screening_id PK "AUTO_INCREMENT"
     VARCHAR(150) event_title
-    BIGINT_UNSIGNED movie_id FK "NULL"
+    BIGINT_UNSIGNED movie_id FK
+    TINYINT_UNSIGNED films_count "DEFAULT 1"
+    BIGINT_UNSIGNED program_id FK
     DATE event_date
     TIME start_time
     TIME end_time
     ENUM type "free, paid; DEFAULT free"
     DECIMAL price "(8,2) NULL"
-    INT_UNSIGNED total_seats "DEFAULT 100"
+    INT_UNSIGNED total_seats "app stores 120"
+    ENUM status "draft, published"
+    VARCHAR(150) partner "NULL"
+    VARCHAR(100) agency_type "NULL"
+    TEXT notes "NULL"
     BIGINT_UNSIGNED created_by FK
     TIMESTAMP created_at "NULL"
     TIMESTAMP updated_at "NULL"
@@ -94,7 +119,7 @@ const src = `erDiagram
     BIGINT_UNSIGNED reservation_id PK "AUTO_INCREMENT"
     BIGINT_UNSIGNED screening_id FK
     VARCHAR(20) booking_reference UK
-    ENUM status "pending, confirmed, cancelled"
+    ENUM status "awaiting_payment, confirmed, cancelled"
     ENUM cancellation_reason "NULL: staff, payment_expired"
     DATETIME cancelled_at "NULL"
     DATETIME reservation_datetime "DEFAULT CURRENT_TIMESTAMP"
@@ -109,6 +134,9 @@ const src = `erDiagram
     BIGINT_UNSIGNED reservation_id FK
     BIGINT_UNSIGNED screening_id FK "UNIQUE with held_seat_id"
     BIGINT_UNSIGNED seat_id FK
+    DECIMAL unit_price "(8,2)"
+    ENUM discount_type "none, pwd, senior"
+    DECIMAL amount_due "(8,2)"
     DATETIME released_at "NULL: set on cancel"
     BIGINT_UNSIGNED held_seat_id "GENERATED: seat_id while held"
   }
@@ -121,7 +149,7 @@ const src = `erDiagram
     VARCHAR(50) last_name
     TINYINT_UNSIGNED age "NULL"
     ENUM sex "M, F; NULL"
-    VARCHAR(150) company_school "NULL"
+    VARCHAR(150) company_school "required (OWWA)"
     VARCHAR(20) contact_no "NULL"
     VARCHAR(100) email "NULL"
     VARCHAR(30) senior_card_no "NULL"
@@ -146,6 +174,46 @@ const src = `erDiagram
     DATETIME checked_in_at
     BIGINT_UNSIGNED checked_in_by FK
   }
+  REPORTS {
+    BIGINT_UNSIGNED report_id PK "AUTO_INCREMENT"
+    BIGINT_UNSIGNED program_id FK,UK
+    ENUM status "draft, submitted, unlocked"
+    BIGINT_UNSIGNED generated_by FK
+    BIGINT_UNSIGNED submitted_by FK "NULL"
+    DATETIME submitted_at "NULL"
+    BIGINT_UNSIGNED unlocked_by FK "NULL"
+    DATETIME unlocked_at "NULL"
+  }
+  REPORT_ROWS {
+    BIGINT_UNSIGNED report_row_id PK "AUTO_INCREMENT"
+    BIGINT_UNSIGNED report_id FK
+    BIGINT_UNSIGNED screening_id FK "NULL"
+    ENUM type "free, paid"
+    DATE screening_date
+    TIME start_time
+    VARCHAR(150) film_title
+    SMALLINT_UNSIGNED films_count
+    INT_UNSIGNED male
+    INT_UNSIGNED female
+    INT_UNSIGNED pwd
+    INT_UNSIGNED senior
+    INT_UNSIGNED total_audience
+    DECIMAL occupancy_rate "(5,2)"
+    INT_UNSIGNED regular_count
+    INT_UNSIGNED discount_count
+    DECIMAL total_sales "(10,2)"
+    VARCHAR(150) partner "NULL"
+    VARCHAR(100) agency_type "NULL"
+    TEXT notes "NULL"
+  }
+  REPORT_EVENTS {
+    BIGINT_UNSIGNED event_id PK "AUTO_INCREMENT"
+    BIGINT_UNSIGNED report_id FK
+    BIGINT_UNSIGNED user_id FK
+    ENUM action "generated, edited, submitted, unlock_requested, unlocked, resubmitted"
+    TEXT reason "NULL"
+    DATETIME created_at
+  }
 
   MOVIES ||--o{ MOVIE_ACTOR : cast
   ACTORS ||--o{ MOVIE_ACTOR : appears_in
@@ -153,7 +221,10 @@ const src = `erDiagram
   DIRECTORS ||--o{ MOVIE_DIRECTOR : directs
   MOVIES ||--o{ MOVIE_GENRE : classified
   GENRES ||--o{ MOVIE_GENRE : applies_to
-  MOVIES |o--o{ SCREENINGS : built_around
+  PROGRAMS ||--o{ MOVIE_PROGRAM : groups
+  MOVIES ||--o{ MOVIE_PROGRAM : listed_in
+  PROGRAMS ||--o{ SCREENINGS : reports
+  MOVIES ||--o{ SCREENINGS : shown_at
   USERS ||--o{ SCREENINGS : creates
   SCREENINGS ||--o{ RESERVATIONS : has
   RESERVATIONS ||--|{ RESERVATION_SEATS : includes
@@ -162,7 +233,13 @@ const src = `erDiagram
   RESERVATION_SEATS ||--|| RESERVATION_ATTENDEES : declared_as
   RESERVATIONS ||--o| PAYMENTS : may_have
   RESERVATION_SEATS ||--o| ATTENDANCES : admission_for
-  USERS ||--o{ ATTENDANCES : checks_in`;
+  USERS ||--o{ ATTENDANCES : checks_in
+  PROGRAMS ||--o| REPORTS : reported_in
+  REPORTS ||--o{ REPORT_ROWS : contains
+  SCREENINGS |o--o{ REPORT_ROWS : frozen_as
+  REPORTS ||--o{ REPORT_EVENTS : audited_by
+  USERS ||--o{ REPORT_EVENTS : performs
+  USERS ||--o{ REPORTS : generates`;
 const { svg } = await mermaid.render('erd-mysql-svg', src);
 document.getElementById('erd-mysql').innerHTML = svg;
 </script>

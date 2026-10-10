@@ -1,6 +1,6 @@
 @props(['current', 'paid' => true])
-{{-- Booking progress as in the mobile app: three gold bars — Seats, Details, Pay / Confirm. --}}
-@php($steps = ['Seats', 'Details', $paid ? 'Pay' : 'Confirm'])
+{{-- Booking progress: four gold bars — Seats, Details, Review, Pay / Confirmed. --}}
+@php($steps = ['Seats', 'Details', 'Review', $paid ? 'Pay' : 'Confirmed'])
 <ol {{ $attributes->merge(['class' => 'steps']) }} aria-label="Booking progress">
     @foreach ($steps as $i => $label)
         <li @class(['is-done' => $i + 1 <= $current]) @if ($i + 1 === $current) aria-current="step" @endif>
