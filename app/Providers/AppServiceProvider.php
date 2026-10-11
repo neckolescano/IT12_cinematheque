@@ -23,8 +23,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // In production every generated link (emails, PayMongo success/cancel URLs) uses https.
-        if ($this->app->isProduction()) {
+        // In production, or behind an https address such as a Cloudflare Tunnel (APP_URL=https://…),
+        // every generated link (assets, emails, PayMongo success/cancel URLs) uses https.
+        if ($this->app->isProduction() || str_starts_with((string) config('app.url'), 'https://')) {
             URL::forceScheme('https');
         }
 
