@@ -43,9 +43,16 @@ class BookingController extends Controller
 
         $selected = collect();
         if ($request->filled('seats')) {
+            // A seat sent twice (e.g. the form resubmitted after going back) counts once, keeping the first position.
+            if (is_array($request->input('seats'))) {
+                $request->merge(['seats' => array_values(array_unique($request->input('seats')))]);
+            }
             $request->validate([
                 'seats' => ['array', 'min:1', 'max:'.StoreReservationRequest::MAX_SEATS_PER_RESERVATION],
                 'seats.*' => ['integer', 'distinct'],
+            ], [
+                'seats.max' => 'You can reserve up to '.StoreReservationRequest::MAX_SEATS_PER_RESERVATION.' seats per booking.',
+                'seats.*' => 'Please choose your seats again.',
             ]);
 
             // Kept in the order chosen: the first seat is the primary booker.
@@ -198,11 +205,12 @@ class BookingController extends Controller
                 ->with('status', 'Reservation '.$reservation->booking_reference.' is held. Complete payment to receive your e-ticket.'.$note);
         }
 
-        $note = $emailed ? ' Your e-ticket has been emailed to '.$reservation->lead_email.'.'
-            : ' We could not email your e-ticket, so please save your booking reference or this page.';
+        // The booking page's status panel already says it is confirmed and where the e-ticket went;
+        // only an email failure needs a separate message.
+        $redirect = redirect()->route('bookings.show', $reservation)->with('booked', true);
 
-        return redirect()->route('bookings.show', $reservation)
-            ->with('booked', true)->with('status', 'Reservation '.$reservation->booking_reference.' is confirmed.'.$note);
+        return $emailed ? $redirect
+            : $redirect->with('warning', 'We could not email your e-ticket, so please save your booking reference or this page.');
     }
 
     /** Send the customer to PayMongo's hosted checkout (reusing an open session). */

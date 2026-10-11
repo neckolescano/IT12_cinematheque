@@ -162,7 +162,7 @@ class OperationsRestructureTest extends TestCase
         // No report yet: live figures.
         $csv = $this->get(route('staff.program-reports.export-program', [$program, 'csv']))->assertOk()
             ->assertHeader('content-disposition', 'attachment; filename="program-report-cinemalaya-2026.csv"')->getContent();
-        $this->assertStringContainsString('Cinemalaya 2026', $csv);
+        $this->assertStringContainsString('CINEMALAYA 2026', $csv);
         $this->assertStringContainsString('PROGRAM TOTAL', $csv);
         $this->assertStringContainsString(',100.00,', $csv);
         $this->get(route('staff.program-reports.export-program', [$program, 'xlsx']))->assertOk()->assertDownload('program-report-cinemalaya-2026.xlsx');
@@ -172,6 +172,6 @@ class OperationsRestructureTest extends TestCase
         $this->post(route('staff.program-reports.submit', Report::firstOrFail()));
         Attendance::query()->delete();
         $csv = $this->get(route('staff.program-reports.export-program', [$program, 'csv']))->getContent();
-        $this->assertStringContainsString('Himala,Paid,1,1,1,', $csv); // still 1 M and 1 F admitted
+        $this->assertStringContainsString('Himala,PAID,1,1,1,', $csv); // still 1 M and 1 F admitted
     }
 }

@@ -3,12 +3,12 @@
 namespace App\Support;
 
 use RuntimeException;
-use ZipArchive;
 
 /**
  * A minimal .xlsx (Office Open XML) writer: one sheet, text and number cells, merged cells, column
- * widths and a fixed set of styles. Enough for the Manila report's two-row header and merged
- * Program / Date cells, without PhpSpreadsheet (which needs PHP's GD extension) — only ext-zip.
+ * widths, frozen panes and a fixed set of styles. Enough for the Manila report's two-row header and merged
+ * Program / Date cells, without PhpSpreadsheet (which needs PHP's GD extension). The .xlsx package (a zip
+ * file) is written here too, with zlib only, so PHP's zip extension is not needed either.
  *
  *   $x = new XlsxWriter('Report');
  *   $x->cell(1, 1, 'PROGRAM', XlsxWriter::HEADER);   // row, column (1-based), value, style
@@ -31,6 +31,24 @@ class XlsxWriter
     public const TOTAL_MONEY = 10;
     public const TOTAL_PERCENT = 11;
     public const SUBTITLE = 12;
+    public const PROGRAM = 13;
+    public const FREE = 14;
+    public const PAID = 15;
+    // Day bands: the same styles on a light fill, for every other screening day.
+    public const BAND_TEXT = 16;
+    public const BAND_CENTER = 17;
+    public const BAND_NUMBER = 18;
+    public const BAND_MONEY = 19;
+    public const BAND_PERCENT = 20;
+
+    private const BANDED = [self::TEXT => self::BAND_TEXT, self::CENTER => self::BAND_CENTER, self::NUMBER => self::BAND_NUMBER,
+        self::MONEY => self::BAND_MONEY, self::PERCENT => self::BAND_PERCENT];
+
+    /** Fill colour (ARGB) of PROGRAM cells. */
+    private string $programFill = 'FF580076';
+
+    /** @var array{0: int, 1: int}|null first scrolling row and column */
+    private ?array $freeze = null;
 
     /** @var array<int, array<int, array{0: string|int|float|null, 1: int}>> */
     private array $cells = [];
@@ -82,6 +100,27 @@ class XlsxWriter
         return $this;
     }
 
+    /** The banded variant of a body style (unchanged for styles without one). */
+    public static function banded(int $style): int
+    {
+        return self::BANDED[$style] ?? $style;
+    }
+
+    public function programFill(string $argb): static
+    {
+        $this->programFill = $argb;
+
+        return $this;
+    }
+
+    /** Keep the rows above $row and the columns before $col in view while scrolling. */
+    public function freeze(int $row, int $col): static
+    {
+        $this->freeze = [$row, $col];
+
+        return $this;
+    }
+
     public function width(int $col, float $width): static
     {
         $this->widths[$col] = $width;
@@ -114,17 +153,39 @@ class XlsxWriter
 
     public function save(string $path): void
     {
-        $zip = new ZipArchive();
-        if ($zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        $zip = self::zip([
+            '[Content_Types].xml' => $this->contentTypes(),
+            '_rels/.rels' => $this->rootRels(),
+            'xl/workbook.xml' => $this->workbook(),
+            'xl/_rels/workbook.xml.rels' => $this->workbookRels(),
+            'xl/styles.xml' => $this->styles(),
+            'xl/worksheets/sheet1.xml' => $this->sheet(),
+        ]);
+        if (file_put_contents($path, $zip) === false) {
             throw new RuntimeException("Cannot write {$path}");
         }
-        $zip->addFromString('[Content_Types].xml', $this->contentTypes());
-        $zip->addFromString('_rels/.rels', $this->rootRels());
-        $zip->addFromString('xl/workbook.xml', $this->workbook());
-        $zip->addFromString('xl/_rels/workbook.xml.rels', $this->workbookRels());
-        $zip->addFromString('xl/styles.xml', $this->styles());
-        $zip->addFromString('xl/worksheets/sheet1.xml', $this->sheet());
-        $zip->close();
+    }
+
+    /**
+     * A zip archive (deflate) built in memory: local headers and data, then the central directory.
+     *
+     * @param  array<string, string>  $files  path inside the archive => contents
+     */
+    private static function zip(array $files): string
+    {
+        $now = getdate();
+        $time = ($now['hours'] << 11) | ($now['minutes'] << 5) | intdiv($now['seconds'], 2);
+        $date = (($now['year'] - 1980) << 9) | ($now['mon'] << 5) | $now['mday'];
+        $body = $central = '';
+        foreach ($files as $name => $content) {
+            $crc = crc32($content);
+            $packed = gzdeflate($content, 6);
+            $offset = strlen($body);
+            $body .= pack('VvvvvvVVVvv', 0x04034B50, 20, 0, 8, $time, $date, $crc, strlen($packed), strlen($content), strlen($name), 0).$name.$packed;
+            $central .= pack('VvvvvvvVVVvvvvvVV', 0x02014B50, 20, 20, 0, 8, $time, $date, $crc, strlen($packed), strlen($content), strlen($name), 0, 0, 0, 0, 0, $offset).$name;
+        }
+
+        return $body.$central.pack('VvvvvVVv', 0x06054B50, 0, 0, count($files), count($files), strlen($central), strlen($body), 0);
     }
 
     private function sheet(): string
@@ -161,9 +222,17 @@ class XlsxWriter
             ? '<mergeCells count="'.count($this->merges).'">'.implode('', array_map(fn ($m) => '<mergeCell ref="'.$m.'"/>', $this->merges)).'</mergeCells>'
             : '';
 
+        $pane = '';
+        if ($this->freeze) {
+            [$fr, $fc] = $this->freeze;
+            $pane = '<pane'.($fc > 1 ? ' xSplit="'.($fc - 1).'"' : '').($fr > 1 ? ' ySplit="'.($fr - 1).'"' : '')
+                .' topLeftCell="'.self::ref($fr, $fc).'" activePane="bottomRight" state="frozen"/>';
+        }
+
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             .'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-            .'<sheetViews><sheetView workbookViewId="0" zoomScale="90"/></sheetViews>'
+            .'<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>'
+            .'<sheetViews><sheetView workbookViewId="0" zoomScale="90">'.$pane.'</sheetView></sheetViews>'
             .'<sheetFormatPr defaultRowHeight="15"/>'
             .$cols.'<sheetData>'.$rows.'</sheetData>'.$merges
             .'<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>'
@@ -173,13 +242,16 @@ class XlsxWriter
 
     private function styles(): string
     {
-        // Fonts: 0 normal, 1 bold, 2 bold 14pt, 3 italic grey
-        // Fills: 0 none, 1 gray125 (required), 2 brand yellow, 3 light grey
+        // Fonts: 0 normal, 1 bold, 2 bold 14pt, 3 italic grey, 4 bold white
+        // Fills: 0 none, 1 gray125 (required), 2 brand gold, 3 light grey, 4 day band (cream), 5 program colour,
+        //        6 free (light green), 7 paid (light blue)
         // Borders: 0 none, 1 thin all round
         // numFmts: 164 = #,##0.00 ; 165 = 0.00"%"
         $xf = fn (int $font, int $fill, int $border, int $numFmt, string $h, bool $wrap = false) => '<xf numFmtId="'.$numFmt.'" fontId="'.$font.'" fillId="'.$fill.'" borderId="'.$border.'" xfId="0"'
             .($font ? ' applyFont="1"' : '').($fill ? ' applyFill="1"' : '').($border ? ' applyBorder="1"' : '').($numFmt ? ' applyNumberFormat="1"' : '')
             .' applyAlignment="1"><alignment horizontal="'.$h.'" vertical="center"'.($wrap ? ' wrapText="1"' : '').'/></xf>';
+
+        $solid = fn (string $argb) => '<fill><patternFill patternType="solid"><fgColor rgb="'.$argb.'"/><bgColor indexed="64"/></patternFill></fill>';
 
         $xfs = [
             self::PLAIN => $xf(0, 0, 0, 0, 'general'),
@@ -195,21 +267,29 @@ class XlsxWriter
             self::TOTAL_MONEY => $xf(1, 3, 1, 164, 'right'),
             self::TOTAL_PERCENT => $xf(1, 3, 1, 165, 'center'),
             self::SUBTITLE => $xf(3, 0, 0, 0, 'left'),
+            self::PROGRAM => $xf(4, 5, 1, 0, 'center', true),
+            self::FREE => $xf(1, 6, 1, 0, 'center'),
+            self::PAID => $xf(1, 7, 1, 0, 'center'),
+            self::BAND_TEXT => $xf(0, 4, 1, 0, 'left', true),
+            self::BAND_CENTER => $xf(0, 4, 1, 0, 'center', true),
+            self::BAND_NUMBER => $xf(0, 4, 1, 1, 'center'),
+            self::BAND_MONEY => $xf(0, 4, 1, 164, 'right'),
+            self::BAND_PERCENT => $xf(0, 4, 1, 165, 'center'),
         ];
         ksort($xfs);
 
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             .'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
             .'<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="0.00&quot;%&quot;"/></numFmts>'
-            .'<fonts count="4">'
+            .'<fonts count="5">'
             .'<font><sz val="10"/><name val="Arial"/></font>'
             .'<font><b/><sz val="10"/><name val="Arial"/></font>'
             .'<font><b/><sz val="14"/><name val="Arial"/></font>'
             .'<font><i/><sz val="10"/><color rgb="FF666666"/><name val="Arial"/></font>'
+            .'<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Arial"/></font>'
             .'</fonts>'
-            .'<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>'
-            .'<fill><patternFill patternType="solid"><fgColor rgb="FFFFE27A"/><bgColor indexed="64"/></patternFill></fill>'
-            .'<fill><patternFill patternType="solid"><fgColor rgb="FFEFEFEF"/><bgColor indexed="64"/></patternFill></fill></fills>'
+            .'<fills count="8"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>'
+            .$solid('FFEBBC00').$solid('FFEFEFEF').$solid('FFFFF8E1').$solid($this->programFill).$solid('FFE3F4E8').$solid('FFE3ECFB').'</fills>'
             .'<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'
             .'<border><left style="thin"><color rgb="FF000000"/></left><right style="thin"><color rgb="FF000000"/></right><top style="thin"><color rgb="FF000000"/></top><bottom style="thin"><color rgb="FF000000"/></bottom><diagonal/></border></borders>'
             .'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'

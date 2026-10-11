@@ -44,4 +44,7 @@
                 </button>
             </div>
         </article>
+        @if ($approved)
+            <p class="print-only eticket__print-note">Present this e-ticket, printed or on your phone, at the entrance of Cinematheque Centre Davao, J. Palma Gil St., Davao City. Each attendee is admitted to the seat listed under their name. Booking reference {{ $reservation->booking_reference }}.</p>
+        @endif
 

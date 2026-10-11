@@ -154,14 +154,24 @@
                 update();
             });
         });
-        // Submit the seats in picking order (checkboxes alone would submit in seat order).
+        // Submit the seats in picking order (checkboxes alone would submit in seat order). Inputs left over
+        // from an earlier submit (Back button, page restored from cache) are cleared first so no seat is sent twice.
         picker.addEventListener('submit', function () {
+            all('[data-seat-order]').forEach(function (h) { h.remove(); });
+            boxes.forEach(function (b) { if (b.checked && order.indexOf(b) === -1) order.push(b); });
             order.forEach(function (b) {
                 var h = document.createElement('input');
                 h.type = 'hidden'; h.name = 'seats[]'; h.value = b.value;
+                h.setAttribute('data-seat-order', '');
                 picker.appendChild(h);
                 b.removeAttribute('name');
             });
+        });
+        window.addEventListener('pageshow', function () {
+            all('[data-seat-order]').forEach(function (h) { h.remove(); });
+            boxes.forEach(function (b) { b.setAttribute('name', 'seats[]'); });
+            order = order.filter(function (b) { return b.checked; });
+            update();
         });
         update();
     }

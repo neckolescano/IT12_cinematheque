@@ -2,6 +2,7 @@
 
 @section('title', 'Booking '.$reservation->booking_reference)
 @section('main_class', 'page page--narrow')
+@section('no_status_flash', '1')
 
 @php
     $screening = $reservation->screening;

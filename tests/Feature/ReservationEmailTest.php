@@ -112,7 +112,7 @@ class ReservationEmailTest extends TestCase
 
         $reservation = Reservation::firstOrFail();
         $this->assertSame('confirmed', $reservation->status); // booking saved despite the failure
-        $this->assertStringContainsString('could not email', session('status'));
+        $this->assertStringContainsString('could not email', session('warning'));
     }
 
     public function test_staff_can_resend_the_current_email(): void

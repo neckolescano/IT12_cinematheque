@@ -603,10 +603,30 @@ dialog.modal::backdrop { background: rgba(20, 18, 25, .5); }
 @keyframes shrink { from { width: 100%; } to { width: 0; } }
 @keyframes progress { from { width: 0; } to { width: 85%; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; scroll-behavior: auto !important; } }
+/* Printing the e-ticket: one A4 page with the ticket at full width and large, readable type. */
+.print-only { display: none; }
 @media print {
-    .site-header, .site-footer, .no-print, .crumbs, .steps, .status { display: none !important; }
-    body { background: #fff; }
-    .eticket { box-shadow: none; border: 1px solid #ccc; }
+    @page { size: A4 portrait; margin: 14mm; }
+    .site-header, .site-footer, .no-print, .crumbs, .steps, .status, .alert, .modal, .preview-bar { display: none !important; }
+    html, body { background: #fff !important; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    main, .page, .page--narrow .container, .container { max-width: none !important; width: auto !important; padding: 0 !important; margin: 0 !important; }
+    .print-only { display: block; }
+    .eticket { box-shadow: none; border: 1.5px solid #222; border-radius: 10px; width: 100%; break-inside: avoid; }
+    .eticket__main { padding: 12mm 12mm 9mm; }
+    .eticket__main .eyebrow { font-size: 11pt; }
+    .eticket__title { font-size: 34pt; line-height: 1.1; margin: 4mm 0 4mm; }
+    .eticket__when { font-size: 15pt; margin-bottom: 7mm; }
+    .eticket__main .label-caps { font-size: 10pt; }
+    .eticket__seats { font-size: 14pt; gap: 2.5mm; margin: 3mm 0 7mm; }
+    .eticket__seat { width: 18mm; }
+    .eticket__main .small { font-size: 12pt; }
+    .eticket__stub { padding: 8mm 12mm; gap: 10mm; }
+    .eticket__stub::before, .eticket__stub::after { background: #fff; }
+    .eticket__admit strong { font-size: 30pt; }
+    .eticket__admit span { font-size: 11pt; }
+    .eticket__ref .ref { font-size: 26pt; }
+    .eticket__print-note { margin: 8mm 1mm 0; font-size: 11pt; color: #333; line-height: 1.5; }
 }
 .ticket-card__body { display: flex; align-items: center; gap: 14px; }
 .ticket-card__body > div { min-width: 0; }

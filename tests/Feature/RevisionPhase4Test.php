@@ -10,7 +10,6 @@ use App\Models\User;
 use Database\Seeders\SeatSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
-use ZipArchive;
 
 /**
  * Revision phase 4 (2026-10-11): the program report in the Manila format, its lock (submit → request
@@ -141,11 +140,9 @@ class RevisionPhase4Test extends TestCase
             ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             ->assertDownload('program-report-pamanang-pelikula.xlsx');
 
-        $zip = new ZipArchive();
-        $this->assertTrue($zip->open($response->baseResponse->getFile()->getPathname()));
-        $sheet = $zip->getFromName('xl/worksheets/sheet1.xml');
-        $this->assertNotFalse($zip->getFromName('xl/styles.xml'));
-        $zip->close();
+        $entries = $this->unzip(file_get_contents($response->baseResponse->getFile()->getPathname()));
+        $sheet = $entries['xl/worksheets/sheet1.xml'];
+        $this->assertArrayHasKey('xl/styles.xml', $entries);
 
         foreach (['PROGRAM', 'NO. OF VIEWERS', 'TICKETS SOLD', 'REGULAR', 'DISCOUNT', 'OCCUPANCY RATE', 'PROGRAM TOTAL', 'Himala'] as $text) {
             $this->assertStringContainsString($text, $sheet);
@@ -181,5 +178,24 @@ class RevisionPhase4Test extends TestCase
         $this->put(route('staff.users.update', $other), ['first_name' => $other->first_name, 'last_name' => $other->last_name, 'email' => $other->email, 'role' => 'super_admin', 'is_active' => '1'])
             ->assertSessionHasErrors('role');
         $this->assertSame(1, User::where('role', 'super_admin')->count());
+    }
+
+    /**
+     * The entries of a zip file, read without PHP's zip extension (local headers in order; deflate or stored).
+     *
+     * @return array<string, string>
+     */
+    private function unzip(string $bytes): array
+    {
+        $entries = [];
+        for ($at = 0; substr($bytes, $at, 4) === "PK\x03\x04";) {
+            $h = unpack('vversion/vflags/vmethod/vtime/vdate/Vcrc/Vsize/Vlength/vname/vextra', substr($bytes, $at + 4, 26));
+            $name = substr($bytes, $at + 30, $h['name']);
+            $data = substr($bytes, $at + 30 + $h['name'] + $h['extra'], $h['size']);
+            $entries[$name] = $h['method'] === 8 ? gzinflate($data) : $data;
+            $at += 30 + $h['name'] + $h['extra'] + $h['size'];
+        }
+
+        return $entries;
     }
 }

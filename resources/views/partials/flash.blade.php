@@ -1,4 +1,5 @@
-@if (session('status'))
+{{-- Pages with their own status panel (the booking page) set @section('no_status_flash') so the same news isn't shown twice. --}}
+@if (session('status') && ! $__env->hasSection('no_status_flash'))
     <div class="alert alert--success" role="status">
         <svg class="alert__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></svg>
         <div>{{ session('status') }}</div>
