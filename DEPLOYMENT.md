@@ -7,7 +7,7 @@ This guide puts the system online for free with:
 | Website | **Render** (Web Service, Docker) | Free instance | Runs the Laravel app over HTTPS |
 | Database | **Clever Cloud** (MySQL add-on, DEV plan) | Free | Stores all data |
 | Email | **Brevo** (transactional email API) | 300 emails/day | Sends booking emails (Render's free tier blocks SMTP, so Gmail SMTP cannot be used there) |
-| Payments | **PayMongo** (test mode) | Free | Online payment by card / GCash / Maya, no real money |
+| Payments | **PayMongo** (test mode) | Free | Online payment by GCash / Maya (no cards), no real money |
 
 Time needed: about 1 hour the first time.
 
@@ -116,7 +116,7 @@ Copy the whole output (`base64:…`). This is `APP_KEY`. Keep it secret and keep
    | `MAIL_FROM_ADDRESS` | the Gmail address verified in Brevo |
    | `MAIL_FROM_NAME` | `Cinematheque Centre Davao` |
    | `PAYMONGO_SECRET_KEY` | your PayMongo **test** secret key (`sk_test_…`) |
-   | `PAYMONGO_PAYMENT_METHODS` | `card,gcash,paymaya` |
+   | `PAYMONGO_PAYMENT_METHODS` | `gcash,paymaya` |
    | `PAYMONGO_WEBHOOK_SECRET` | leave empty for now (step 8) |
    | `INITIAL_ADMIN_EMAIL` | the email the Super Admin will sign in with |
    | `INITIAL_ADMIN_PASSWORD` | a strong password, at least 12 characters |
@@ -161,7 +161,7 @@ Open **Logs** in Render and check for `Created super_admin account …` and no e
 ## 9. End-to-end check
 
 1. Book a **free** screening on the public site with your own email → the e-ticket email arrives (check Spam).
-2. Book a **paid** screening → pay on PayMongo with the test GCash / test card `4343 4343 4343 4345` → the booking turns **Confirmed** and the e-ticket arrives.
+2. Book a **paid** screening → pay on PayMongo with test GCash or Maya (**Authorize Test Payment**) → the booking turns **Confirmed** and the e-ticket arrives.
 3. Staff side: admit the attendees, open **Reports**, export the **.xlsx** and **.csv**.
 4. Run a test email any time from Render's **Shell** (paid plans) or locally against the same settings: `php artisan mail:test you@example.com`.
 
