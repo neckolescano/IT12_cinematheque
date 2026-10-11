@@ -120,7 +120,6 @@ class RevisionPhase1Test extends TestCase
 
         $this->assertSame(0, Movie::doesntHave('programs')->count());
         $this->assertSame(6, Movie::whereNotNull('poster_path')->count());
-        $this->assertSame('free', Screening::whereDate('event_date', today())->firstOrFail()->type);
         $this->assertSame(0, Screening::whereNull('program_id')->count());
         $this->assertSame(6, Screening::where('program_id', Program::where('name', CatalogSeeder::PROGRAM)->value('program_id'))->count());
         $this->assertSame(Seat::CAPACITY, Seat::count());

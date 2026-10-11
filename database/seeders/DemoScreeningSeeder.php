@@ -20,7 +20,7 @@ use Illuminate\Support\Str;
  *  - never paid (its window already passed, so the first page visit expires it and frees the seats)
  *  - an almost-full screening
  *
- * The schedule has no free screenings, so one free demo screening is added on the day of seeding (Community Screenings).
+ * The schedule has no free screenings; staff add those (e.g. under Community Screenings) when needed.
  * The PayMongo ids below are demo values; they don't exist in any PayMongo account.
  */
 class DemoScreeningSeeder extends Seeder
@@ -83,8 +83,6 @@ class DemoScreeningSeeder extends Seeder
         for ($n = 0; $n < 10; $n++) {
             $this->paid(Reservation::factory()->for($screenings['A.ni.mál'])->withSeats(10)->create(['status' => 'confirmed']));
         }
-
-        $this->call(DemoFreeScreeningSeeder::class);
     }
 
     private function paid(Reservation $reservation): void
