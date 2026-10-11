@@ -14,27 +14,26 @@ use Illuminate\Support\Str;
 
 /**
  * Demo screenings: FDCP Cinematheque Centre Davao's Cinemalaya 2026 schedule (Pelikula ng Bayan),
- * 15–16 October 2026, ₱150 each, plus bookings covering the payment states:
+ * 15–16 October 2026. The 15 October screenings are free; the 16 October ones are ₱150. Bookings:
+ *  - free: confirmed on booking (e-ticket), including an almost-full screening
  *  - paid through PayMongo (confirmed, e-ticket)
  *  - awaiting payment (held for 15 minutes from seeding)
  *  - never paid (its window already passed, so the first page visit expires it and frees the seats)
- *  - an almost-full screening
  *
- * The schedule has no free screenings; staff add those (e.g. under Community Screenings) when needed.
  * The PayMongo ids below are demo values; they don't exist in any PayMongo account.
  */
 class DemoScreeningSeeder extends Seeder
 {
     public const PRICE = 150.00;
 
-    /** [date, start, title] as on the CCD schedule; the end time follows the film's runtime. */
+    /** [date, start, title, price or null for free] as on the CCD schedule; the end time follows the film's runtime. */
     public const SCHEDULE = [
-        ['2026-10-15', '13:00', 'Tirik (To Set Upright)'],
-        ['2026-10-15', '15:00', 'Kaka sa Yawan (Brothers by the River)'],
-        ['2026-10-15', '17:00', 'A.ni.mál'],
-        ['2026-10-16', '13:00', 'Hand of God'],
-        ['2026-10-16', '15:00', 'Ganggang'],
-        ['2026-10-16', '17:00', 'Tayo Lang ang Nakakaalam (Only Known to Us)'],
+        ['2026-10-15', '13:00', 'Tirik (To Set Upright)', null],
+        ['2026-10-15', '15:00', 'Kaka sa Yawan (Brothers by the River)', null],
+        ['2026-10-15', '17:00', 'A.ni.mál', null],
+        ['2026-10-16', '13:00', 'Hand of God', self::PRICE],
+        ['2026-10-16', '15:00', 'Ganggang', self::PRICE],
+        ['2026-10-16', '17:00', 'Tayo Lang ang Nakakaalam (Only Known to Us)', self::PRICE],
     ];
 
     public function run(): void
@@ -44,7 +43,7 @@ class DemoScreeningSeeder extends Seeder
         $programId = Program::where('name', CatalogSeeder::PROGRAM)->value('program_id');
 
         $screenings = [];
-        foreach (self::SCHEDULE as $i => [$date, $time, $title]) {
+        foreach (self::SCHEDULE as $i => [$date, $time, $title, $price]) {
             $movie = Movie::where('title', $title)->firstOrFail();
             $start = Carbon::parse("{$date} {$time}");
             // Round the end up to the next 5 minutes.
@@ -58,31 +57,30 @@ class DemoScreeningSeeder extends Seeder
                 'event_date' => $date,
                 'start_time' => $start->format('H:i'),
                 'end_time' => $end->format('H:i'),
-                'type' => 'paid',
-                'price' => self::PRICE,
+                'type' => $price ? 'paid' : 'free',
+                'price' => $price,
                 'total_seats' => Seat::CAPACITY,
                 'created_by' => ($i < 3 ? $avt : $pdo)->user_id,
             ]);
         }
 
+        // Free (15 October): confirmed as soon as they are booked; one screening almost full (100 of 120 seats).
+        Reservation::factory()->for($screenings['Tirik (To Set Upright)'])->withSeats(3)->create(['status' => 'confirmed']);
+        Reservation::factory()->for($screenings['Kaka sa Yawan (Brothers by the River)'])->withSeats(2)->create(['status' => 'confirmed']);
+        Reservation::factory()->count(10)->for($screenings['A.ni.mál'])->withSeats(10)->create(['status' => 'confirmed']);
+
         // Paid through PayMongo → confirmed (e-ticket).
-        $this->paid(Reservation::factory()->for($screenings['Tirik (To Set Upright)'])->withSeats(3)->create(['status' => 'confirmed']));
         $this->paid(Reservation::factory()->for($screenings['Hand of God'])->withSeats(4)->create(['status' => 'confirmed']));
         $this->paid(Reservation::factory()->for($screenings['Ganggang'])->withSeats(2)->create(['status' => 'confirmed']));
 
         // Awaiting payment: held for 15 minutes from now.
-        $kaka = $screenings['Kaka sa Yawan (Brothers by the River)'];
-        Reservation::factory()->for($kaka)->awaitingPayment()->withSeats(2)->create()
+        $tayo = $screenings['Tayo Lang ang Nakakaalam (Only Known to Us)'];
+        Reservation::factory()->for($tayo)->awaitingPayment()->withSeats(2)->create()
             ->payment()->create(['amount' => 2 * self::PRICE, 'status' => 'pending']);
 
         // Never paid: its window passed an hour ago, so the first page visit expires it.
-        Reservation::factory()->for($kaka)->awaitingPayment()->withSeats(2)->create(['reservation_datetime' => now()->subHour()])
+        Reservation::factory()->for($tayo)->awaitingPayment()->withSeats(2)->create(['reservation_datetime' => now()->subHour()])
             ->payment()->create(['amount' => 2 * self::PRICE, 'status' => 'pending']);
-
-        // Almost full: 100 of 120 seats sold.
-        for ($n = 0; $n < 10; $n++) {
-            $this->paid(Reservation::factory()->for($screenings['A.ni.mál'])->withSeats(10)->create(['status' => 'confirmed']));
-        }
     }
 
     private function paid(Reservation $reservation): void
