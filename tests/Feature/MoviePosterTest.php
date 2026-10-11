@@ -22,11 +22,11 @@ class MoviePosterTest extends TestCase
         $this->actingAs(User::factory()->create());
     }
 
-    /** A real image (the seed posters), so the tests don't need PHP's GD extension. */
-    private function poster(string $name, string $source = 'malvarosa.jpg'): UploadedFile
+    /** A real image (tests/fixtures), so the tests don't need PHP's GD extension. */
+    private function poster(string $name, string $source = 'poster.jpg'): UploadedFile
     {
         $copy = tempnam(sys_get_temp_dir(), 'poster');
-        copy(database_path('seeders/posters/'.$source), $copy);
+        copy(base_path('tests/fixtures/'.$source), $copy);
 
         return new UploadedFile($copy, $name, null, null, true);
     }
@@ -52,7 +52,7 @@ class MoviePosterTest extends TestCase
         $movie = Movie::factory()->create(['poster_path' => $this->poster('a.jpg')->store('posters', 'public')]);
         $first = $movie->poster_path;
 
-        $this->put(route('staff.movies.update', $movie), ['title' => $movie->title, 'poster' => $this->poster('b.png', 'the-secret-agent.png')]);
+        $this->put(route('staff.movies.update', $movie), ['title' => $movie->title, 'poster' => $this->poster('b.png', 'poster.png')]);
         $second = $movie->fresh()->poster_path;
         $this->assertNotSame($first, $second);
         Storage::disk('public')->assertMissing($first);

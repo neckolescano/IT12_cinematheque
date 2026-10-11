@@ -6,108 +6,91 @@ use App\Models\Movie;
 use App\Models\Program;
 use App\Models\Reservation;
 use App\Models\Screening;
+use App\Models\Seat;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
- * Demo screenings for the CatalogSeeder lineup (free LVN / Nora Aunor tributes, ₱150 world
- * cinema), dated from tomorrow on, plus bookings covering every workflow state:
- *  - free: awaiting staff approval, approved, cancelled by staff (seats released)
- *  - paid: paid through PayMongo, awaiting payment, expired unpaid (seats released)
- *  - past screening: one seat admitted, one no-show
+ * Demo screenings: FDCP Cinematheque Centre Davao's Cinemalaya 2026 schedule (Pelikula ng Bayan),
+ * 15–16 October 2026, ₱150 each, plus bookings covering the payment states:
+ *  - paid through PayMongo (confirmed, e-ticket)
+ *  - awaiting payment (held for 15 minutes from seeding)
+ *  - never paid (its window already passed, so the first page visit expires it and frees the seats)
  *  - an almost-full screening
  *
- * The "awaiting payment" booking expires 15 minutes after seeding, like any unpaid booking.
+ * The schedule has no free screenings, so one free demo screening is added on the day of seeding (Community Screenings).
  * The PayMongo ids below are demo values; they don't exist in any PayMongo account.
  */
 class DemoScreeningSeeder extends Seeder
 {
+    public const PRICE = 150.00;
+
+    /** [date, start, title] as on the CCD schedule; the end time follows the film's runtime. */
+    public const SCHEDULE = [
+        ['2026-10-15', '13:00', 'Tirik (To Set Upright)'],
+        ['2026-10-15', '15:00', 'Kaka sa Yawan (Brothers by the River)'],
+        ['2026-10-15', '17:00', 'A.ni.mál'],
+        ['2026-10-16', '13:00', 'Hand of God'],
+        ['2026-10-16', '15:00', 'Ganggang'],
+        ['2026-10-16', '17:00', 'Tayo Lang ang Nakakaalam (Only Known to Us)'],
+    ];
+
     public function run(): void
     {
         $avt = User::where('email', 'avt@cinematheque.test')->firstOrFail();
         $pdo = User::where('email', 'pdo@cinematheque.test')->firstOrFail();
+        $programId = Program::where('name', CatalogSeeder::PROGRAM)->value('program_id');
 
-        $screen = function (string $title, int $day, string $time, ?float $price = null, ?User $by = null) use ($avt) {
-            $start = Carbon::parse($time);
+        $screenings = [];
+        foreach (self::SCHEDULE as $i => [$date, $time, $title]) {
+            $movie = Movie::where('title', $title)->firstOrFail();
+            $start = Carbon::parse("{$date} {$time}");
+            // Round the end up to the next 5 minutes.
+            $end = $start->copy()->addMinutes((int) (ceil($movie->runtime_minutes / 5) * 5));
 
-            // An event that isn't a catalogued film (a shorts block) gets its own film record in Community Screenings.
-            $movie = Movie::where('title', $title)->first();
-            $programId = $movie?->programs()->value('programs.program_id')
-                ?? Program::where('name', 'Community Screenings')->value('program_id');
-            if (! $movie) {
-                $movie = Movie::create(['title' => $title]);
-                $movie->programs()->attach($programId);
-            }
-
-            return Screening::create([
+            $screenings[$title] = Screening::create([
                 'event_title' => $title,
                 'movie_id' => $movie->movie_id,
-                'films_count' => str_starts_with($title, 'Shorts') ? 5 : 1,
+                'films_count' => 1,
                 'program_id' => $programId,
-                'event_date' => today()->addDays($day),
+                'event_date' => $date,
                 'start_time' => $start->format('H:i'),
-                'end_time' => $start->copy()->addHours(2)->format('H:i'),
-                'type' => $price ? 'paid' : 'free',
-                'price' => $price,
-                'total_seats' => \App\Models\Seat::CAPACITY,
-                'created_by' => ($by ?? $avt)->user_id,
+                'end_time' => $end->format('H:i'),
+                'type' => 'paid',
+                'price' => self::PRICE,
+                'total_seats' => Seat::CAPACITY,
+                'created_by' => ($i < 3 ? $avt : $pdo)->user_id,
             ]);
-        };
+        }
 
-        // Pamanang Pelikula: Tribute to LVN Pictures (free)
-        $malvarosa = $screen('Malvarosa', 1, '13:00');
-        $biyaya = $screen('Biyaya ng Lupa', 1, '15:00');
-        $screen('Anak Dalita', 2, '13:00');
-        // A free community event with no catalogued film (generated poster tile).
-        $shorts = $screen('Shorts Night: Mindanao Filmmakers', 3, '18:00');
-        // FDCP Presents: world cinema (₱150)
-        $accident = $screen('It Was Just an Accident', 4, '15:00', 150, $pdo);
-        $screen('Case 137', 4, '17:00', 150, $pdo);
-        $screen('The Secret Agent', 5, '12:00', 150, $pdo);
-        $screen('Sound of Falling', 5, '15:00', 150, $pdo);
-        // Pamanang Pelikula: Tribute to Nora Aunor (free)
-        $himala = $screen('Himala', 6, '17:00');
-        $screen('Resurrection', 7, '12:00', 150, $pdo);
-        $screen('The Blue Trail', 7, '15:00', 150, $pdo);
-        $sentimental = $screen('Sentimental Value', 7, '17:00', 150, $pdo);
-
-        // Free: awaiting approval, approved, and cancelled by staff (its seats are free again).
-        Reservation::factory()->for($malvarosa)->withSeats(3)->create(['status' => 'confirmed']);
-        Reservation::factory()->for($shorts)->withSeats(2)->create(['status' => 'confirmed']);
-        Reservation::factory()->for($biyaya)->withSeats(2)->create(['status' => 'confirmed'])->cancel('staff');
-
-        // Paid through PayMongo → approved (e-ticket).
-        $this->paid(Reservation::factory()->for($accident)->withSeats(3)->create(['status' => 'confirmed']), 450.00);
-        $this->paid(Reservation::factory()->for($sentimental)->withSeats(4)->create(['status' => 'confirmed']), 600.00);
+        // Paid through PayMongo → confirmed (e-ticket).
+        $this->paid(Reservation::factory()->for($screenings['Tirik (To Set Upright)'])->withSeats(3)->create(['status' => 'confirmed']));
+        $this->paid(Reservation::factory()->for($screenings['Hand of God'])->withSeats(4)->create(['status' => 'confirmed']));
+        $this->paid(Reservation::factory()->for($screenings['Ganggang'])->withSeats(2)->create(['status' => 'confirmed']));
 
         // Awaiting payment: held for 15 minutes from now.
-        Reservation::factory()->for($accident)->awaitingPayment()->withSeats(2)->create()
-            ->payment()->create(['amount' => 300.00, 'status' => 'pending']);
+        $kaka = $screenings['Kaka sa Yawan (Brothers by the River)'];
+        Reservation::factory()->for($kaka)->awaitingPayment()->withSeats(2)->create()
+            ->payment()->create(['amount' => 2 * self::PRICE, 'status' => 'pending']);
 
         // Never paid: its window passed an hour ago, so the first page visit expires it.
-        Reservation::factory()->for($accident)->awaitingPayment()->withSeats(2)->create(['reservation_datetime' => now()->subHour()])
-            ->payment()->create(['amount' => 300.00, 'status' => 'pending']);
+        Reservation::factory()->for($kaka)->awaitingPayment()->withSeats(2)->create(['reservation_datetime' => now()->subHour()])
+            ->payment()->create(['amount' => 2 * self::PRICE, 'status' => 'pending']);
 
-        // Almost full.
-        Reservation::factory()->count(8)->for($himala)->withSeats(10)->create(['status' => 'confirmed']);
+        // Almost full: 100 of 120 seats sold.
+        for ($n = 0; $n < 10; $n++) {
+            $this->paid(Reservation::factory()->for($screenings['A.ni.mál'])->withSeats(10)->create(['status' => 'confirmed']));
+        }
 
-        // Past screening: one seat admitted, one no-show (reserved, never arrived).
-        $past = $screen('Anak Dalita', -5, '14:00');
-        $pastReservation = Reservation::factory()->for($past)->withSeats(2)
-            ->create(['status' => 'confirmed', 'reservation_datetime' => now()->subDays(8)]);
-        $pastReservation->reservationSeats()->first()->attendance()->create([
-            'checked_in_at' => today()->subDays(5)->setTime(13, 50),
-            'checked_in_by' => $pdo->user_id,
-            'remarks' => 'Arrived early.',
-        ]);
+        $this->call(DemoFreeScreeningSeeder::class);
     }
 
-    private function paid(Reservation $reservation, float $amount): void
+    private function paid(Reservation $reservation): void
     {
         $reservation->payment()->create([
-            'amount' => $amount,
+            'amount' => $reservation->reservationSeats()->count() * self::PRICE,
             'status' => 'verified',
             'payment_channel' => 'gcash',
             'provider_session_id' => 'cs_demo_'.Str::lower(Str::random(20)),

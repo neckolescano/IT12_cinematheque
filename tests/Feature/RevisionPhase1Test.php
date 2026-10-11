@@ -115,12 +115,12 @@ class RevisionPhase1Test extends TestCase
 
     public function test_demo_data_files_every_film_and_screening_under_a_program(): void
     {
-        \Illuminate\Support\Facades\Storage::fake('public'); // CatalogSeeder copies poster files
         $this->seed([StaffUserSeeder::class, CatalogSeeder::class, DemoScreeningSeeder::class]);
 
         $this->assertSame(0, Movie::doesntHave('programs')->count());
+        $this->assertSame('free', Screening::whereDate('event_date', today())->firstOrFail()->type);
         $this->assertSame(0, Screening::whereNull('program_id')->count());
-        $this->assertSame('Community Screenings', Screening::where('event_title', 'Shorts Night: Mindanao Filmmakers')->firstOrFail()->program->name);
+        $this->assertSame(6, Screening::where('program_id', Program::where('name', CatalogSeeder::PROGRAM)->value('program_id'))->count());
         $this->assertSame(Seat::CAPACITY, Seat::count());
     }
 }

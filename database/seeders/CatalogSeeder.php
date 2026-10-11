@@ -2,73 +2,66 @@
 
 namespace Database\Seeders;
 
-use App\Models\Director;
 use App\Models\Genre;
 use App\Models\Movie;
 use App\Models\Program;
 use Illuminate\Database\Seeder;
-use Illuminate\Http\File;
-use Illuminate\Support\Facades\Storage;
 
 /**
- * Demo catalog: films from the Cinematheque Centre Davao lineup (FDCP, May 2026) with their
- * posters. Only facts from that lineup are seeded (title, year, director); runtime, rating,
- * synopsis, genres and cast are left for staff to fill in.
- *
- * Posters: database/seeders/posters/, the low-resolution copies Wikipedia hosts under fair
- * use (sources in posters/sources.json). For a class demo; credit the rights holders if they
- * appear in the paper.
+ * Demo catalog: the Cinemalaya 2026 full-length finalists that FDCP Cinematheque Centre Davao
+ * screens under "Pelikula ng Bayan: FDCP Screenings" (CCD screening schedule, 15–16 October 2026).
+ * Directors, runtimes, genres and cast are from each film's page on cinemalaya.org; the ratings
+ * are the ones on the CCD schedule. The loglines are short summaries written for this demo.
+ * No posters are seeded: the films show the generated poster tile until staff upload one.
  */
 class CatalogSeeder extends Seeder
 {
-    /** title => [release year, directors, poster file in database/seeders/posters] */
-    public const FILMS = [
-        'Malvarosa' => [1958, ['Gregorio Fernandez'], 'malvarosa.jpg'],
-        'Biyaya ng Lupa' => [1959, ['Manuel Silos'], 'biyaya-ng-lupa.jpg'],
-        'Anak Dalita' => [1956, ['Lamberto V. Avellana'], 'anak-dalita.jpg'],
-        'Himala' => [1982, ['Ishmael Bernal'], 'himala.jpg'],
-        'It Was Just an Accident' => [2025, ['Jafar Panahi'], 'it-was-just-an-accident.jpg'],
-        'Case 137' => [2025, ['Dominik Moll'], 'case-137.jpg'],
-        'The Secret Agent' => [2025, ['Kleber Mendonça Filho'], 'the-secret-agent.png'],
-        'Sound of Falling' => [2025, ['Mascha Schilinski'], 'sound-of-falling.webp'],
-        'Resurrection' => [2025, ['Bi Gan'], 'resurrection.jpg'],
-        'The Blue Trail' => [2025, ['Gabriel Mascaro'], 'the-blue-trail.jpg'],
-        'Sentimental Value' => [2025, ['Joachim Trier'], 'sentimental-value.jpg'],
-    ];
+    public const PROGRAM = 'Pelikula ng Bayan: Cinemalaya 2026';
 
-    /** The lineup's programs (parents of films and screenings) => the films in each. */
-    public const PROGRAMS = [
-        'Pamanang Pelikula: Tribute to LVN Pictures' => ['Malvarosa', 'Biyaya ng Lupa', 'Anak Dalita'],
-        'Pamanang Pelikula: Tribute to Nora Aunor' => ['Himala'],
-        'FDCP Presents: World Cinema' => ['It Was Just an Accident', 'Case 137', 'The Secret Agent', 'Sound of Falling', 'Resurrection', 'The Blue Trail', 'Sentimental Value'],
-        'Community Screenings' => [],
+    /** title => [runtime (min), rating, directors, genres, main cast, logline] */
+    public const FILMS = [
+        'Tirik (To Set Upright)' => [91, 'PG', 'May-i Guia Padilla', ['Thriller', 'Drama'],
+            'Rocco Nacino, Floyd Tena, Chai Fonacier',
+            'A priest and a taxi driver cross Manila during the drug war while escaping an attempt on their lives.'],
+        'Kaka sa Yawan (Brothers by the River)' => [90, 'PG', 'Alpha Habon', ['Drama'],
+            'Beaver Magtalas, Bryce Nicolo Mercader, Nikki Valdez',
+            'A Manila boy and a Tadyawan-Mangyan boy share one summer in Mindoro; years later, a promise brings him back.'],
+        'A.ni.mál' => [120, 'R-13', 'Dustin Celestino', ['Comedy', 'Drama'],
+            'Maxine Ignacio, Frances Makil-Ignacio, Jojit Lorenzo',
+            "A mayor's daughter comes home with a video of a powerful ally abusing his dog, and her family's loyalties crack."],
+        'Hand of God' => [106, 'PG', 'Mark Duane Angos', ['Drama'],
+            'Ruru Madrid, Iza Calzado, Ronnie Lazaro',
+            'In a village scarred by conflict, a former child soldier finds hope in football.'],
+        'Ganggang' => [89, 'PG', 'JL Burgos', ['Drama'],
+            'Raine Dela Cruz, Kenneth Vincent Mendoza, Don Rishmond Cerbito',
+            "Three boys hunt for the best fighting spider to beat the school bully's, until the search tests their friendship."],
+        'Tayo Lang ang Nakakaalam (Only Known to Us)' => [110, 'R-13', 'David R. Corpuz', ['Drama'],
+            'Martin del Rosario, Miguel Odron, Yayo Aguila',
+            'When someone they love falls ill, a family must face the love it has kept quiet.'],
     ];
 
     public function run(): void
     {
-        // The fixed genre list (not assigned: the lineup doesn't list genres).
+        // The fixed genre list.
         collect(Movie::GENRES)
             ->each(fn ($name) => Genre::firstOrCreate(['genre_name' => $name]));
 
-        foreach (self::FILMS as $title => [$year, $directors, $poster]) {
-            $path = Storage::disk('public')->putFileAs(Movie::POSTER_DIR, new File(database_path('seeders/posters/'.$poster)), $poster);
+        $program = Program::firstOrCreate(['name' => self::PROGRAM], [
+            'description' => 'Cinemalaya 2026 full-length finalists, screened by FDCP Cinematheque Centre Davao.',
+        ]);
+        // For events that are not a catalogued film (e.g. a talk or a community shorts block).
+        Program::firstOrCreate(['name' => 'Community Screenings']);
 
-            $movie = Movie::create(['title' => $title, 'release_year' => $year, 'poster_path' => $path]);
-            $movie->directors()->sync(collect($directors)->map(fn ($name) => $this->director($name)->director_id));
+        foreach (self::FILMS as $title => [$runtime, $rating, $directors, $genres, $cast, $logline]) {
+            $movie = Movie::create([
+                'title' => $title,
+                'release_year' => 2026,
+                'runtime_minutes' => $runtime,
+                'rating' => $rating,
+                'logline' => $logline,
+            ]);
+            $movie->syncDetails($genres, $directors, $cast);
+            $movie->programs()->attach($program);
         }
-
-        foreach (self::PROGRAMS as $name => $titles) {
-            $program = Program::firstOrCreate(['name' => $name]);
-            $program->movies()->syncWithoutDetaching(Movie::whereIn('title', $titles)->pluck('movie_id'));
-        }
-    }
-
-    /** "Lamberto V. Avellana" → first "Lamberto V.", last "Avellana". */
-    private function director(string $name): Director
-    {
-        $parts = explode(' ', $name);
-        $last = array_pop($parts);
-
-        return Director::firstOrCreate(['first_name' => implode(' ', $parts), 'last_name' => $last]);
     }
 }
