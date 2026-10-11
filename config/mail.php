@@ -65,6 +65,12 @@ return [
             'transport' => 'resend',
         ],
 
+        // Brevo's HTTPS email API (free: 300 emails/day). For hosts that block SMTP, such as Render's free tier.
+        // Registered in AppServiceProvider; set MAIL_MAILER=brevo and BREVO_API_KEY.
+        'brevo' => [
+            'transport' => 'brevo',
+        ],
+
         'sendmail' => [
             'transport' => 'sendmail',
             'path' => env('MAIL_SENDMAIL_PATH', '/usr/sbin/sendmail -bs -i'),

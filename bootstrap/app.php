@@ -19,6 +19,10 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Unpaid bookings past their 15-minute payment window release their seats (decision 5b).
         $middleware->web(append: [ExpireUnpaidReservations::class]);
+
+        // Hosted behind a load balancer / TLS proxy (Render, Koyeb, Cloudflare Tunnel): trust its X-Forwarded-*
+        // headers so request URLs, redirects and PayMongo return links use https and the public host.
+        $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
